@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: code-server
+  namespace: codelearn
+  labels:
+    app: code-server
+spec:
+  type: ClusterIP
+  selector:
+    app: code-server
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
