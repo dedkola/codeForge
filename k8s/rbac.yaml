@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: codeforge-sa
+  namespace: codelearn
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: codeforge-cs-manager
+  namespace: codelearn
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/status"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: codeforge-cs-manager-binding
+  namespace: codelearn
+subjects:
+  - kind: ServiceAccount
+    name: codeforge-sa
+    namespace: codelearn
+roleRef:
+  kind: Role
+  name: codeforge-cs-manager
+  apiGroup: rbac.authorization.k8s.io

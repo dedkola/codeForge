@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { dash } from "@better-auth/infra";
-import { Pool } from "pg";
+import { pool } from "./db";
 
 const envBaseUrl = process.env.BETTER_AUTH_URL;
 const isDockerBuild = process.env.DOCKER_BUILD === "true";
@@ -22,9 +22,7 @@ export const auth = betterAuth({
   appName: "CodeForge",
   secret: authSecret,
   baseURL: normalizedBaseUrl,
-  database: new Pool({
-    connectionString: process.env.DATABASE_URL,
-  }),
+  database: pool,
   advanced: {
     trustedProxyHeaders: true,
     ipAddress: {

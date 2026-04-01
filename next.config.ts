@@ -19,8 +19,8 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: blob:",
-              // Allow framing code-server from any origin (overridden per env)
-              "frame-src *",
+              // Allow framing code-server proxy
+              "frame-src https://cs-proxy.tkweb.site",
               "connect-src 'self' ws: wss: http: https:",
             ].join("; "),
           },

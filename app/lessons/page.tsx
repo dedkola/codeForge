@@ -21,11 +21,9 @@ export default async function LessonsPage() {
     redirect(`/login?next=${encodeURIComponent("/lessons")}`);
   }
 
-  const codeServerUrl = process.env.CODE_SERVER_URL;
-
   return (
     <>
-      <TopBar codeServerUrl={codeServerUrl} />
+      <TopBar />
       <main className="catalog-page">
         {/* Hero */}
         <section className="catalog-hero">

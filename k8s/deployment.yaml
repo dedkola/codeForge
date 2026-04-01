@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: codeforge
+  namespace: codelearn
   labels:
     app: codeforge
 spec:
@@ -14,6 +15,7 @@ spec:
       labels:
         app: codeforge
     spec:
+      serviceAccountName: codeforge-sa
       imagePullSecrets:
         - name: ghcr-secret
       containers:
@@ -28,6 +30,8 @@ spec:
               value: "production"
             - name: DOCKER_BUILD
               value: "true"
+            - name: CS_PROXY_URL
+              value: "https://cs-proxy.tkweb.site"
           resources:
             requests:
               memory: "256Mi"
