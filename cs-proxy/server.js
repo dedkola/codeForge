@@ -1,4 +1,5 @@
 const http = require("http");
+const { createHmac } = require("crypto");
 const httpProxy = require("http-proxy");
 const { jwtVerify } = require("jose");
 const { parse: parseUrl } = require("url");
@@ -6,7 +7,86 @@ const { parse: parseCookie } = require("./cookie");
 
 const PORT = process.env.PORT || 8080;
 const NAMESPACE = process.env.NAMESPACE || "codelearn";
-const secret = new TextEncoder().encode(process.env.CS_PROXY_SECRET);
+const RAW_SECRET = process.env.CS_PROXY_SECRET;
+const secret = new TextEncoder().encode(RAW_SECRET);
+
+/* ── Per-user password derivation (mirrors lib/code-server-password.ts) ── */
+
+function derivePassword(slug) {
+  return createHmac("sha256", RAW_SECRET)
+    .update(`cs-pod-password:${slug}`)
+    .digest("hex");
+}
+
+/* ── Transparent login to code-server (password auth) ── */
+
+/** slug → code-server "key" cookie value */
+const csSessionCache = new Map();
+
+/**
+ * POST /login on the code-server pod to obtain its session cookie.
+ * Returns the raw "key" cookie value or null on failure.
+ */
+function loginToCodeServer(svc, slug) {
+  return new Promise((resolve) => {
+    const password = derivePassword(slug);
+    const body = `password=${encodeURIComponent(password)}`;
+    const target = `${svc}.${NAMESPACE}.svc.cluster.local`;
+
+    const req = http.request(
+      {
+        hostname: target,
+        port: 80,
+        path: "/login",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Content-Length": Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        // Drain the response body
+        res.resume();
+
+        const setCookies = res.headers["set-cookie"] || [];
+        for (const sc of setCookies) {
+          const match = sc.match(/^key=([^;]+)/);
+          if (match) {
+            resolve(match[1]);
+            return;
+          }
+        }
+        resolve(null);
+      },
+    );
+
+    req.on("error", () => resolve(null));
+    req.end(body);
+  });
+}
+
+/**
+ * Ensure we have a cached code-server session cookie for the given slug.
+ * Returns the cookie value or null.
+ */
+async function ensureCsSession(svc, slug) {
+  let cookie = csSessionCache.get(slug);
+  if (cookie) return cookie;
+
+  cookie = await loginToCodeServer(svc, slug);
+  if (cookie) csSessionCache.set(slug, cookie);
+  return cookie;
+}
+
+/**
+ * Inject the code-server "key" cookie into the request headers.
+ */
+function injectCsSessionCookie(req, csCookie) {
+  const existing = req.headers.cookie || "";
+  req.headers.cookie = existing
+    ? `${existing}; key=${csCookie}`
+    : `key=${csCookie}`;
+}
 
 const proxy = httpProxy.createProxyServer({
   ws: true,
@@ -19,6 +99,21 @@ proxy.on("error", (err, req, res) => {
   if (res.writeHead) {
     res.writeHead(502, { "Content-Type": "text/plain" });
     res.end("Bad Gateway");
+  }
+});
+
+// Detect stale code-server session: if code-server redirects to /login,
+// the cached cookie is invalid (pod was restarted). Clear it so next
+// request triggers a fresh transparent login.
+proxy.on("proxyRes", (proxyRes, req) => {
+  if (
+    proxyRes.statusCode === 302 &&
+    (proxyRes.headers.location || "").includes("/login")
+  ) {
+    const route = parseRoute(req.originalUrl || req.url || "/");
+    if (route) {
+      csSessionCache.delete(route.slug);
+    }
   }
 });
 
@@ -137,6 +232,14 @@ const server = http.createServer(async (req, res) => {
   }
 
   const { payload, fromQuery } = session;
+
+  // Preserve original URL for the proxyRes stale-session handler
+  req.originalUrl = req.url;
+
+  // Transparent login: inject code-server session cookie so the pod accepts the request
+  const csCookie = await ensureCsSession(payload.svc, route.slug);
+  if (csCookie) injectCsSessionCookie(req, csCookie);
+
   if (fromQuery) {
     const queryWithoutToken = { ...route.query };
     delete queryWithoutToken.token;
@@ -166,6 +269,10 @@ server.on("upgrade", async (req, socket, head) => {
     sendWsAuthError(socket, session.status);
     return;
   }
+
+  // Transparent login: inject code-server session cookie for WebSocket
+  const wsCsCookie = await ensureCsSession(session.payload.svc, route.slug);
+  if (wsCsCookie) injectCsSessionCookie(req, wsCsCookie);
 
   sanitizeRequestUrlForUpstream(req, route.suffix, route.query);
   proxy.ws(req, socket, head, { target: buildTarget(session.payload.svc) });

@@ -5,6 +5,7 @@ import {
   CODE_SERVER_PVC_SIZE,
   CODE_SERVER_STORAGE_CLASS,
 } from "./code-server-config";
+import { deriveCodeServerPassword } from "./code-server-password";
 
 /** Produce a K8s-safe slug from a user ID (lowercase hex, 12 chars). */
 export function userSlug(userId: string): string {
@@ -84,12 +85,15 @@ export async function createPod(userId: string): Promise<void> {
             image: CODE_SERVER_IMAGE,
             args: [
               "--bind-addr=0.0.0.0:80",
-              "--auth=none",
+              "--auth=password",
               "--disable-telemetry",
               "/home/coder/project",
             ],
             ports: [{ containerPort: 80 }],
-            env: [{ name: "HOME", value: "/home/coder" }],
+            env: [
+              { name: "HOME", value: "/home/coder" },
+              { name: "PASSWORD", value: deriveCodeServerPassword(slug) },
+            ],
             resources: {
               requests: { memory: "256Mi", cpu: "100m" },
               limits: { memory: "512Mi", cpu: "500m" },
