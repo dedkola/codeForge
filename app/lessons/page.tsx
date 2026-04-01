@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 export default function LessonsPage() {
-  const codeServerUrl = process.env.CODE_SERVER_URL || "http://localhost:8080";
+  const codeServerUrl = process.env.CODE_SERVER_URL;
 
   return (
     <>

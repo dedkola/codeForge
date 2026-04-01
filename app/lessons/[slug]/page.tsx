@@ -30,7 +30,7 @@ export default async function LessonPage({ params }: PageProps) {
   const { slug } = await params;
   const lesson = getLessonBySlug(slug);
   if (!lesson) notFound();
-  const codeServerUrl = process.env.CODE_SERVER_URL || "http://localhost:8080";
+  const codeServerUrl = process.env.CODE_SERVER_URL;
 
   return (
     <>

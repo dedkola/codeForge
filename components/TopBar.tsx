@@ -11,7 +11,7 @@ interface TopBarProps {
 export default function TopBar({ lessonTitle, codeServerUrl }: TopBarProps) {
   const pathname = usePathname();
   const isLesson = pathname.startsWith("/lessons/");
-  const openUrl = codeServerUrl || "http://localhost:8080";
+  const openUrl = codeServerUrl;
 
   return (
     <header className="topbar">

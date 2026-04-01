@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 
 interface CodeServerPanelProps {
-  url: string;
+  url: string | undefined;
 }
 
 export default function CodeServerPanel({ url }: CodeServerPanelProps) {
