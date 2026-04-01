@@ -67,10 +67,9 @@ export default function CodeServerPanel({
       "code-server-iframe",
     ) as HTMLIFrameElement | null;
     if (iframe) {
-      // eslint-disable-next-line no-self-assign
-      iframe.src = iframe.src;
+      iframe.src = codeServerUrl ?? iframe.src;
     }
-  }, []);
+  }, [codeServerUrl]);
 
   // "Setting up workspace" state
   if (status === "starting") {
@@ -96,7 +95,13 @@ export default function CodeServerPanel({
           }}
           className="animate-spin"
         />
-        <p style={{ color: "var(--text-primary)", fontSize: 15, fontWeight: 600 }}>
+        <p
+          style={{
+            color: "var(--text-primary)",
+            fontSize: 15,
+            fontWeight: 600,
+          }}
+        >
           Setting up your workspace…
         </p>
         <p style={{ color: "var(--text-muted)", fontSize: 13 }}>
@@ -121,11 +126,25 @@ export default function CodeServerPanel({
         }}
       >
         <div style={{ fontSize: 40 }}>⚠️</div>
-        <h3 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>
+        <h3
+          style={{
+            fontSize: 16,
+            fontWeight: 700,
+            color: "var(--text-primary)",
+          }}
+        >
           Could not start your workspace
         </h3>
-        <p style={{ color: "var(--text-muted)", fontSize: 13, maxWidth: 340, textAlign: "center" }}>
-          There was a problem creating your code environment. Please try reloading the page.
+        <p
+          style={{
+            color: "var(--text-muted)",
+            fontSize: 13,
+            maxWidth: 340,
+            textAlign: "center",
+          }}
+        >
+          There was a problem creating your code environment. Please try
+          reloading the page.
         </p>
         <button
           className="btn btn-primary"

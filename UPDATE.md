@@ -1,5 +1,14 @@
 # CodeForge — Deployment & Operations Guide
 
+## Refactor status (April 2026)
+
+- Runtime policy values moved to `lib/code-server-config.ts`.
+- Code-server image is now pinned by default (`codercom/code-server:4.105.2`) instead of `latest`.
+- API and manager idle/timeout/proxy behavior now consume shared config (no duplicated hardcoded values).
+- K8s baseline now includes `NetworkPolicy` and `LimitRange` for per-user workloads via `k8s/kustomization.yaml`.
+
+This guide remains valid; the next refactor phases will split docs into dedicated architecture and runbook files.
+
 ## How it all fits together
 
 ```
@@ -12,8 +21,9 @@ User browser
     │       │
     │       └── calls K8s API (in-cluster via ServiceAccount)
     │
-    └── https://<slug>.cs-proxy.tkweb.site  (cs-proxy)
-            │  - Verifies JWT token → sets per-user subdomain cookie
+    └── https://cs-proxy.tkweb.site/u/<slug>/  (cs-proxy)
+            │  - Verifies JWT token for that slug path
+            │  - Sets `cs_session` cookie scoped to `/u/<slug>`
             │  - Reverse-proxies HTTP + WebSocket to the user's code-server pod
             │
             └── http://cs-svc-<slug>.codelearn.svc.cluster.local:80
@@ -25,20 +35,20 @@ User browser
 
 Everything lives in the `codelearn` namespace:
 
-| Resource | Name pattern | What it is |
-|---|---|---|
-| Deployment | `codeforge` | Next.js app (3 replicas) |
-| Deployment | `cs-proxy` | Reverse proxy (1 replica) |
-| Service | `codeforge-service` | Routes traffic to Next.js pods |
-| Service | `cs-proxy` | Routes traffic to cs-proxy pod |
-| Ingress | `codeforge-ingress` | `codeforge.tkweb.site` → codeforge-service |
-| Ingress | `cs-proxy` | `*.cs-proxy.tkweb.site` → cs-proxy service |
-| CronJob | `cs-cleanup` | Deletes idle code-server pods every 30 min |
-| Secret | `codeforge-secrets` | All env secrets |
-| ServiceAccount | `codeforge-sa` | Gives Next.js app permission to manage pods |
-| Pod (dynamic) | `cs-<slug>` | Per-user code-server instance |
-| Service (dynamic) | `cs-svc-<slug>` | Per-user ClusterIP service |
-| PVC (dynamic) | `cs-pvc-<slug>` | Per-user 1 Gi workspace volume |
+| Resource          | Name pattern        | What it is                                  |
+| ----------------- | ------------------- | ------------------------------------------- |
+| Deployment        | `codeforge`         | Next.js app (3 replicas)                    |
+| Deployment        | `cs-proxy`          | Reverse proxy (1 replica)                   |
+| Service           | `codeforge-service` | Routes traffic to Next.js pods              |
+| Service           | `cs-proxy`          | Routes traffic to cs-proxy pod              |
+| Ingress           | `codeforge-ingress` | `codeforge.tkweb.site` → codeforge-service  |
+| Ingress           | `cs-proxy`          | `cs-proxy.tkweb.site` → cs-proxy service    |
+| CronJob           | `cs-cleanup`        | Deletes idle code-server pods every 30 min  |
+| Secret            | `codeforge-secrets` | All env secrets                             |
+| ServiceAccount    | `codeforge-sa`      | Gives Next.js app permission to manage pods |
+| Pod (dynamic)     | `cs-<slug>`         | Per-user code-server instance               |
+| Service (dynamic) | `cs-svc-<slug>`     | Per-user ClusterIP service                  |
+| PVC (dynamic)     | `cs-pvc-<slug>`     | Per-user 1 Gi workspace volume              |
 
 ---
 
@@ -53,9 +63,9 @@ Everything lives in the `codelearn` namespace:
    - Creates a ClusterIP service `cs-svc-<slug>` pointing at that pod
    - Waits up to 15 s for the pod readiness probe to pass
 3. App generates a signed JWT: `{ sub: userId, svc: "cs-svc-<slug>", exp: 8h }`
-4. Frontend renders an `<iframe>` pointing to `https://<slug>.cs-proxy.tkweb.site/?token=<JWT>`
-5. cs-proxy verifies the JWT, sets a `cs_session` cookie **scoped to `<slug>.cs-proxy.tkweb.site`** (subdomain isolation — each user's cookie is on their own subdomain so no user can accidentally get routed to another user's pod), then redirects to `/`
-6. All subsequent requests from within the iframe use the cookie; cs-proxy reads the `svc` from the JWT stored in the cookie and proxies to `http://cs-svc-<slug>.codelearn.svc.cluster.local:80`
+4. Frontend renders an `<iframe>` pointing to `https://cs-proxy.tkweb.site/u/<slug>/?token=<JWT>`
+5. cs-proxy verifies JWT, validates that path slug matches `svc`, sets `cs_session` cookie **scoped to `/u/<slug>`**, then redirects to `https://cs-proxy.tkweb.site/u/<slug>/`
+6. All subsequent requests from within the iframe use the cookie on that path; cs-proxy re-validates slug ↔ service mapping and proxies to `http://cs-svc-<slug>.codelearn.svc.cluster.local:80`
 
 **Persistence:** The PVC is never deleted automatically. The pod is deleted by the CronJob after 120 min idle (no lesson page open), but the next visit recreates the pod and remounts the same PVC — files are always there.
 
@@ -64,10 +74,11 @@ Everything lives in the `codelearn` namespace:
 ## First-time cluster setup (do once)
 
 ### Prerequisites
+
 - k3s running, `kubectl` pointing at it
 - `ghcr-secret` image pull secret created in `codelearn` namespace (for GHCR)
-- Cloudflared tunnel configured for `codeforge.tkweb.site` and `*.cs-proxy.tkweb.site`
-- DNS: both `codeforge.tkweb.site` and `*.cs-proxy.tkweb.site` → cloudflared tunnel
+- Cloudflared tunnel configured for `codeforge.tkweb.site` and `cs-proxy.tkweb.site`
+- DNS: `codeforge.tkweb.site` and `cs-proxy.tkweb.site` → cloudflared tunnel
 
 ### 1. Create the namespace
 
@@ -89,6 +100,7 @@ kubectl create secret docker-registry ghcr-secret \
 ### 3. Edit secrets before deploying
 
 Open `k8s/secrets.yaml` and set real values for every key — especially:
+
 - `CS_PROXY_SECRET` — random 32+ char string (shared between Next.js and cs-proxy)
 - `DATABASE_URL` — your Neon (or other Postgres) connection string
 - `BETTER_AUTH_SECRET` — random secret for session signing
@@ -103,6 +115,7 @@ kubectl apply -k k8s/
 This applies: Deployment, Service, Ingress, RBAC, Secret, ConfigMap, CronJob — all in `codelearn`.
 
 Verify:
+
 ```bash
 kubectl get pods -n codelearn
 # codeforge-xxxxxxxxx-xxxxx   1/1   Running   ...
@@ -122,29 +135,30 @@ kubectl apply -f cs-proxy/k8s/
 `cs-proxy` reads `CS_PROXY_SECRET` from the same `codeforge-secrets` Secret/key used by the Next.js app.
 
 Verify:
+
 ```bash
 kubectl get pods -n codelearn
 # cs-proxy-xxxxxxxxx-xxxxx    1/1   Running   ...
 ```
 
-### 6. Cloudflared wildcard routing
+### 6. Cloudflared routing
 
-In your cloudflared tunnel config (usually `~/.cloudflared/config.yml` or the Cloudflare dashboard), make sure both domains route to your k3s ingress:
+In your cloudflared tunnel config (usually `~/.cloudflared/config.yml` or the Cloudflare dashboard), route both hostnames to your k3s ingress:
 
 ```yaml
 ingress:
   - hostname: "codeforge.tkweb.site"
     service: https://<k3s-node-ip>:443
     originRequest:
-      noTLSVerify: true          # if using self-signed cert on ingress
-  - hostname: "*.cs-proxy.tkweb.site"
+      noTLSVerify: true # if using self-signed cert on ingress
+  - hostname: "cs-proxy.tkweb.site"
     service: https://<k3s-node-ip>:443
     originRequest:
       noTLSVerify: true
   - service: http_status:404
 ```
 
-> **Note:** Wildcard hostnames in cloudflared require the tunnel to be configured via the config file or Cloudflare dashboard (not `cloudflared tunnel route dns`). Cloudflare's Universal SSL covers `*.cs-proxy.tkweb.site` automatically on proxied DNS records — no cert-manager wildcard cert needed.
+> **Note:** This setup does not require wildcard DNS or wildcard TLS. `cs-proxy` isolates users by signed token + `/u/<slug>` path validation.
 
 ---
 
@@ -169,6 +183,7 @@ kubectl apply -f k8s/deployment.yaml
 > The `deployment.yaml` has a Flux CD image policy comment (`{"$imagepolicy": ...}`). If you set up [Flux CD image automation](https://fluxcd.io/flux/guides/image-update/), it will automatically update the image tag in Git and apply it to the cluster whenever a new tag is pushed. Without Flux, use option A or B above.
 
 Check rollout status:
+
 ```bash
 kubectl rollout status deployment/codeforge -n codelearn
 ```
@@ -234,16 +249,16 @@ kubectl delete pvc cs-pvc-<slug> -n codelearn
 
 All injected from `codeforge-secrets` Secret:
 
-| Variable | Used by | Description |
-|---|---|---|
-| `DATABASE_URL` | Next.js | Postgres connection string (Neon) |
-| `BETTER_AUTH_SECRET` | Next.js | Session signing secret |
-| `BETTER_AUTH_URL` | Next.js | Public URL of the app |
-| `BETTER_AUTH_API_KEY` | Next.js | Better Auth dashboard key |
-| `GOOGLE_CLIENT_ID` | Next.js | OAuth |
-| `GOOGLE_CLIENT_SECRET` | Next.js | OAuth |
-| `CS_PROXY_SECRET` | Next.js + cs-proxy | Shared secret for JWT signing |
-| `CS_PROXY_URL` | Next.js | Set in deployment.yaml as plain env (not secret): `https://cs-proxy.tkweb.site` |
+| Variable               | Used by            | Description                                                                     |
+| ---------------------- | ------------------ | ------------------------------------------------------------------------------- |
+| `DATABASE_URL`         | Next.js            | Postgres connection string (Neon)                                               |
+| `BETTER_AUTH_SECRET`   | Next.js            | Session signing secret                                                          |
+| `BETTER_AUTH_URL`      | Next.js            | Public URL of the app                                                           |
+| `BETTER_AUTH_API_KEY`  | Next.js            | Better Auth dashboard key                                                       |
+| `GOOGLE_CLIENT_ID`     | Next.js            | OAuth                                                                           |
+| `GOOGLE_CLIENT_SECRET` | Next.js            | OAuth                                                                           |
+| `CS_PROXY_SECRET`      | Next.js + cs-proxy | Shared secret for JWT signing                                                   |
+| `CS_PROXY_URL`         | Next.js            | Set in deployment.yaml as plain env (not secret): `https://cs-proxy.tkweb.site` |
 
 ---
 
@@ -251,6 +266,7 @@ All injected from `codeforge-secrets` Secret:
 
 **Pods stay in `Pending`**  
 PVC can't be provisioned. Check the storage class exists:
+
 ```bash
 kubectl get storageclass
 # Should show: local-path (default)
@@ -258,6 +274,7 @@ kubectl get storageclass
 
 **`ImagePullBackOff` on codeforge pod**  
 The `ghcr-secret` pull secret is missing or expired:
+
 ```bash
 kubectl describe pod <pod-name> -n codelearn | grep -A5 Events
 ```
@@ -265,12 +282,16 @@ kubectl describe pod <pod-name> -n codelearn | grep -A5 Events
 **Users see 401 in the iframe**  
 The `CS_PROXY_SECRET` in `codeforge-secrets` doesn't match the one in the cs-proxy deployment env. Both must be identical.
 
+**Users see 403 in the iframe**  
+The slug in `/u/<slug>/` doesn't match the JWT service claim (`cs-svc-<slug>`). Regenerate the iframe URL from the app.
+
 **Iframe shows "Bad Gateway"**  
 The user's code-server pod is not ready yet. Wait a few seconds and reload. If it persists:
+
 ```bash
 kubectl get pod cs-<slug> -n codelearn
 kubectl describe pod cs-<slug> -n codelearn
 ```
 
 **Two users see the same files**  
-This was a cookie isolation bug (fixed). All user proxy URLs must use the per-user subdomain format `https://<slug>.cs-proxy.tkweb.site`. Verify the `CS_PROXY_URL` env var in `k8s/deployment.yaml` is `https://cs-proxy.tkweb.site` (no slug — the slug is prepended at runtime in the API routes).
+All user proxy URLs must use path format `https://cs-proxy.tkweb.site/u/<slug>/`. `cs-proxy` enforces slug/path to service mapping and cookie path scoping (`/u/<slug>`). Verify `CS_PROXY_URL` in `k8s/deployment.yaml` is `https://cs-proxy.tkweb.site`.

@@ -22,76 +22,148 @@ proxy.on("error", (err, req, res) => {
   }
 });
 
-async function extractPayload(req) {
-  // Try query param first
-  const { query } = parseUrl(req.url, true);
-  if (query.token) {
-    try {
-      const { payload } = await jwtVerify(query.token, secret);
-      if (payload.sub && payload.svc) {
-        return { userId: payload.sub, svc: payload.svc, rawToken: query.token };
-      }
-    } catch {
-      return null;
-    }
-  }
+function expectedServiceForSlug(slug) {
+  return `cs-svc-${slug}`;
+}
 
-  // Fall back to cookie
-  const cookies = parseCookie(req.headers.cookie || "");
-  const cookieToken = cookies.cs_session;
-  if (cookieToken) {
-    try {
-      const { payload } = await jwtVerify(cookieToken, secret);
-      if (payload.sub && payload.svc) {
-        return { userId: payload.sub, svc: payload.svc, rawToken: cookieToken };
-      }
-    } catch {
-      return null;
-    }
-  }
+function parseRoute(url) {
+  const { pathname = "/", query } = parseUrl(url, true);
+  const match = pathname.match(/^\/u\/([a-f0-9]{12})(\/.*)?$/);
+  if (!match) return null;
 
-  return null;
+  const slug = match[1];
+  const suffix = match[2] || "/";
+  return { slug, suffix, pathname, query };
 }
 
 function buildTarget(svc) {
   return `http://${svc}.${NAMESPACE}.svc.cluster.local:80`;
 }
 
+function sanitizeRequestUrlForUpstream(req, suffix, queryWithoutToken) {
+  const cleanQuery = new URLSearchParams();
+  for (const [key, value] of Object.entries(queryWithoutToken)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) cleanQuery.append(key, String(item));
+      continue;
+    }
+    cleanQuery.append(key, String(value));
+  }
+  const qs = cleanQuery.toString();
+  req.url = qs ? `${suffix}?${qs}` : suffix;
+}
+
+function tokenFromCookie(req) {
+  const cookies = parseCookie(req.headers.cookie || "");
+  return cookies.cs_session || null;
+}
+
+async function verifyToken(rawToken) {
+  try {
+    const { payload } = await jwtVerify(rawToken, secret);
+    if (typeof payload.sub !== "string" || typeof payload.svc !== "string") {
+      return null;
+    }
+    return { userId: payload.sub, svc: payload.svc, rawToken };
+  } catch {
+    return null;
+  }
+}
+
+async function resolveSession(req, route) {
+  const rawQueryToken = typeof route.query.token === "string" ? route.query.token : null;
+  const rawCookieToken = tokenFromCookie(req);
+  const rawToken = rawQueryToken || rawCookieToken;
+  if (!rawToken) return { status: "unauthorized" };
+
+  const payload = await verifyToken(rawToken);
+  if (!payload) return { status: "unauthorized" };
+
+  if (payload.svc !== expectedServiceForSlug(route.slug)) {
+    return { status: "forbidden" };
+  }
+
+  return {
+    status: "ok",
+    payload,
+    fromQuery: Boolean(rawQueryToken),
+  };
+}
+
+function sendHttpAuthError(res, status) {
+  const code = status === "forbidden" ? 403 : 401;
+  const body = status === "forbidden" ? "Forbidden" : "Unauthorized";
+  res.writeHead(code, { "Content-Type": "text/plain" });
+  res.end(body);
+}
+
+function sendWsAuthError(socket, status) {
+  const code = status === "forbidden" ? 403 : 401;
+  const body = status === "forbidden" ? "Forbidden" : "Unauthorized";
+  socket.write(`HTTP/1.1 ${code} ${body}\r\n\r\n`);
+  socket.destroy();
+}
+
 const server = http.createServer(async (req, res) => {
-  const payload = await extractPayload(req);
-  if (!payload) {
-    res.writeHead(401, { "Content-Type": "text/plain" });
-    res.end("Unauthorized");
+  const route = parseRoute(req.url || "/");
+  if (!route) {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("Not Found");
     return;
   }
 
-  const target = buildTarget(payload.svc);
+  const session = await resolveSession(req, route);
+  if (session.status !== "ok") {
+    sendHttpAuthError(res, session.status);
+    return;
+  }
 
-  // If token came from query param, set cookie and redirect to clean URL
-  const { query } = parseUrl(req.url, true);
-  if (query.token) {
+  const { payload, fromQuery } = session;
+  if (fromQuery) {
+    const queryWithoutToken = { ...route.query };
+    delete queryWithoutToken.token;
+    const cleanQuery = new URLSearchParams();
+    for (const [key, value] of Object.entries(queryWithoutToken)) {
+      if (value === undefined) continue;
+      if (Array.isArray(value)) {
+        for (const item of value) cleanQuery.append(key, String(item));
+      } else {
+        cleanQuery.append(key, String(value));
+      }
+    }
+    const redirectPath = cleanQuery.toString()
+      ? `${route.pathname}?${cleanQuery.toString()}`
+      : route.pathname;
+
     res.writeHead(302, {
-      Location: "/",
-      "Set-Cookie": `cs_session=${payload.rawToken}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=28800`,
+      Location: redirectPath,
+      "Set-Cookie": `cs_session=${payload.rawToken}; Path=/u/${route.slug}; HttpOnly; Secure; SameSite=None; Max-Age=28800`,
     });
     res.end();
     return;
   }
 
-  proxy.web(req, res, { target });
+  sanitizeRequestUrlForUpstream(req, route.suffix, route.query);
+  proxy.web(req, res, { target: buildTarget(payload.svc) });
 });
 
-// WebSocket upgrade
 server.on("upgrade", async (req, socket, head) => {
-  const payload = await extractPayload(req);
-  if (!payload) {
-    socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+  const route = parseRoute(req.url || "/");
+  if (!route) {
+    socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
     socket.destroy();
     return;
   }
 
-  const target = buildTarget(payload.svc);
-  proxy.ws(req, socket, head, { target });
+  const session = await resolveSession(req, route);
+  if (session.status !== "ok") {
+    sendWsAuthError(socket, session.status);
+    return;
+  }
+
+  sanitizeRequestUrlForUpstream(req, route.suffix, route.query);
+  proxy.ws(req, socket, head, { target: buildTarget(session.payload.svc) });
 });
 
 server.listen(PORT, () => {

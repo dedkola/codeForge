@@ -16,6 +16,10 @@ import {
   getStaleInstances,
 } from "./code-server-db";
 import { NAMESPACE } from "./k8s";
+import {
+  CODE_SERVER_MAX_IDLE_MINUTES,
+  CODE_SERVER_POD_READY_TIMEOUT_MS,
+} from "./code-server-config";
 
 export interface EnsureResult {
   status: "ready" | "starting" | "error";
@@ -48,7 +52,10 @@ export async function ensureUserCodeServer(
     await createPod(userId);
     await createService(userId);
   } catch (err) {
-    console.error(`Failed to create code-server resources for user ${userId}:`, err);
+    console.error(
+      `Failed to create code-server resources for user ${userId}:`,
+      err,
+    );
     await upsertInstance(userId, pod, svc, pvc);
     await updateStatus(userId, "error");
     return { status: "error", svcName: svc, internalUrl };
@@ -57,7 +64,7 @@ export async function ensureUserCodeServer(
   await upsertInstance(userId, pod, svc, pvc);
 
   // Wait for pod readiness (up to 15s)
-  const ready = await waitForPodReady(userId, 15000);
+  const ready = await waitForPodReady(userId, CODE_SERVER_POD_READY_TIMEOUT_MS);
   if (ready) {
     await updateStatus(userId, "running");
     return { status: "ready", svcName: svc, internalUrl };
@@ -75,7 +82,7 @@ export async function stopUserCodeServer(userId: string): Promise<void> {
 }
 
 export async function cleanupStaleInstances(
-  maxIdleMinutes: number = 120,
+  maxIdleMinutes: number = CODE_SERVER_MAX_IDLE_MINUTES,
 ): Promise<number> {
   const cutoff = new Date(Date.now() - maxIdleMinutes * 60 * 1000);
   const stale = await getStaleInstances(cutoff);

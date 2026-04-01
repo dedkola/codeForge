@@ -1,5 +1,10 @@
 import { createHash } from "crypto";
 import { coreV1Api, NAMESPACE } from "./k8s";
+import {
+  CODE_SERVER_IMAGE,
+  CODE_SERVER_PVC_SIZE,
+  CODE_SERVER_STORAGE_CLASS,
+} from "./code-server-config";
 
 /** Produce a K8s-safe slug from a user ID (lowercase hex, 12 chars). */
 export function userSlug(userId: string): string {
@@ -16,10 +21,23 @@ export function resourceNames(userId: string) {
   };
 }
 
+function userResourceLabels(slug: string): Record<string, string> {
+  return {
+    app: "code-server-user",
+    userId: slug,
+    "app.kubernetes.io/name": "code-server",
+    "app.kubernetes.io/part-of": "codeforge",
+    "app.kubernetes.io/managed-by": "codeforge-runtime",
+  };
+}
+
 export async function createPVC(userId: string): Promise<void> {
   const { pvc, slug } = resourceNames(userId);
   try {
-    await coreV1Api.readNamespacedPersistentVolumeClaim({ name: pvc, namespace: NAMESPACE });
+    await coreV1Api.readNamespacedPersistentVolumeClaim({
+      name: pvc,
+      namespace: NAMESPACE,
+    });
     return; // already exists
   } catch {
     // does not exist, create it
@@ -31,12 +49,12 @@ export async function createPVC(userId: string): Promise<void> {
       metadata: {
         name: pvc,
         namespace: NAMESPACE,
-        labels: { app: "code-server-user", userId: slug },
+        labels: userResourceLabels(slug),
       },
       spec: {
         accessModes: ["ReadWriteOnce"],
-        storageClassName: "local-path",
-        resources: { requests: { storage: "1Gi" } },
+        storageClassName: CODE_SERVER_STORAGE_CLASS,
+        resources: { requests: { storage: CODE_SERVER_PVC_SIZE } },
       },
     },
   });
@@ -57,13 +75,13 @@ export async function createPod(userId: string): Promise<void> {
       metadata: {
         name: pod,
         namespace: NAMESPACE,
-        labels: { app: "code-server-user", userId: slug },
+        labels: userResourceLabels(slug),
       },
       spec: {
         containers: [
           {
             name: "code-server",
-            image: "codercom/code-server:latest",
+            image: CODE_SERVER_IMAGE,
             args: [
               "--bind-addr=0.0.0.0:80",
               "--auth=none",
@@ -117,7 +135,7 @@ export async function createService(userId: string): Promise<void> {
       metadata: {
         name: svc,
         namespace: NAMESPACE,
-        labels: { app: "code-server-user", userId: slug },
+        labels: userResourceLabels(slug),
       },
       spec: {
         type: "ClusterIP",
@@ -140,18 +158,22 @@ export async function deletePod(userId: string): Promise<void> {
 export async function deleteService(userId: string): Promise<void> {
   const { svc } = resourceNames(userId);
   try {
-    await coreV1Api.deleteNamespacedService({ name: svc, namespace: NAMESPACE });
+    await coreV1Api.deleteNamespacedService({
+      name: svc,
+      namespace: NAMESPACE,
+    });
   } catch {
     // service may not exist
   }
 }
 
-export async function getPodStatus(
-  userId: string,
-): Promise<string | null> {
+export async function getPodStatus(userId: string): Promise<string | null> {
   const { pod } = resourceNames(userId);
   try {
-    const response = await coreV1Api.readNamespacedPod({ name: pod, namespace: NAMESPACE });
+    const response = await coreV1Api.readNamespacedPod({
+      name: pod,
+      namespace: NAMESPACE,
+    });
     return response.status?.phase ?? null;
   } catch {
     return null;
@@ -161,11 +183,12 @@ export async function getPodStatus(
 export async function isPodReady(userId: string): Promise<boolean> {
   const { pod } = resourceNames(userId);
   try {
-    const response = await coreV1Api.readNamespacedPod({ name: pod, namespace: NAMESPACE });
+    const response = await coreV1Api.readNamespacedPod({
+      name: pod,
+      namespace: NAMESPACE,
+    });
     const conditions = response.status?.conditions ?? [];
-    return conditions.some(
-      (c) => c.type === "Ready" && c.status === "True",
-    );
+    return conditions.some((c) => c.type === "Ready" && c.status === "True");
   } catch {
     return false;
   }

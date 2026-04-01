@@ -15,19 +15,6 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    # Per-user subdomain: <slug>.cs-proxy.tkweb.site
-    # Each user gets an isolated cs_session cookie scoped to their subdomain.
-    - host: "*.cs-proxy.tkweb.site"
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: cs-proxy
-                port:
-                  number: 80
-    # Keep base domain for direct access / health checks
     - host: cs-proxy.tkweb.site
       http:
         paths:
@@ -41,5 +28,4 @@ spec:
   tls:
     - hosts:
         - cs-proxy.tkweb.site
-        - "*.cs-proxy.tkweb.site"
       secretName: cs-proxy-tls

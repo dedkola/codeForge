@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { getUserCodeServerStatus } from "@/lib/code-server-manager";
 import { generateProxyToken } from "@/lib/code-server-token";
 import { resourceNames, userSlug } from "@/lib/code-server-k8s";
+import { getCodeServerProxyBaseUrl } from "@/lib/code-server-config";
 
 export async function GET() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -17,12 +18,9 @@ export async function GET() {
   if (status === "ready") {
     const { svc } = resourceNames(session.user.id);
     const token = await generateProxyToken(session.user.id, svc);
-    const baseUrl = process.env.CS_PROXY_URL ?? "https://cs-proxy.tkweb.site";
-    // Use per-user subdomain so each user's cs_session cookie is isolated to
-    // their own hostname — prevents cookie collision between concurrent users.
+    const proxyBase = getCodeServerProxyBaseUrl();
     const slug = userSlug(session.user.id);
-    const proxyBase = baseUrl.replace("://", `://${slug}.`);
-    proxyUrl = `${proxyBase}/?token=${token}`;
+    proxyUrl = `${proxyBase}/u/${slug}/?token=${token}`;
   }
 
   return NextResponse.json({ status, proxyUrl });
