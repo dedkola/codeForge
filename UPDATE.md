@@ -108,7 +108,7 @@ kubectl get pods -n codelearn
 # codeforge-xxxxxxxxx-xxxxx   1/1   Running   ...
 ```
 
-### 5. Build and deploy cs-proxy (one time, then only if server.js changes)
+### 5. Build and deploy cs-proxy (one time, then only if `cs-proxy` code changes)
 
 ```bash
 # Build and push the cs-proxy image
@@ -118,6 +118,8 @@ docker push ghcr.io/dedkola/cs-proxy:latest
 # Deploy cs-proxy to the cluster
 kubectl apply -f cs-proxy/k8s/
 ```
+
+`cs-proxy` reads `CS_PROXY_SECRET` from the same `codeforge-secrets` Secret/key used by the Next.js app.
 
 Verify:
 ```bash
