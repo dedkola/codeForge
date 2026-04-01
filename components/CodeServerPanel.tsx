@@ -3,12 +3,11 @@
 import { useState, useEffect } from "react";
 
 interface CodeServerPanelProps {
-  url?: string;
+  url: string;
 }
 
 export default function CodeServerPanel({ url }: CodeServerPanelProps) {
-  const codeServerUrl =
-    url || process.env.NEXT_PUBLIC_CODE_SERVER_URL || "http://localhost:8080";
+  const codeServerUrl = url;
 
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);

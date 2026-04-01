@@ -65,7 +65,7 @@ openssl s_client -connect cs.doc.tk.com:443 -servername cs.doc.tk.com </dev/null
 The URL configured in the frontend must be HTTPS and trusted, for example:
 
 ```bash
-NEXT_PUBLIC_CODE_SERVER_URL=https://cs.doc.tk.com
+CODE_SERVER_URL=https://cs.doc.tk.com
 ```
 
 ## Connect the Frontend
@@ -80,10 +80,10 @@ NEXT_PUBLIC_CODE_SERVER_URL=https://cs.doc.tk.com
 
    ```env
    # If using ingress (replace with your ingress address):
-   NEXT_PUBLIC_CODE_SERVER_URL=http://<ingress-ip>
+   CODE_SERVER_URL=http://<ingress-ip>
 
    # If using port-forward:
-   NEXT_PUBLIC_CODE_SERVER_URL=http://localhost:8080
+   CODE_SERVER_URL=http://localhost:8080
    ```
 
 3. Start the frontend:
@@ -103,7 +103,7 @@ If you don't want to use Ingress, you can port-forward directly:
 kubectl -n codelearn port-forward svc/code-server 8080:80
 ```
 
-Then set `NEXT_PUBLIC_CODE_SERVER_URL=http://localhost:8080` in your `.env.local`.
+Then set `CODE_SERVER_URL=http://localhost:8080` in your `.env.local`.
 
 ## Authentication Mode
 

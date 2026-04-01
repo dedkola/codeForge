@@ -14,7 +14,9 @@ export async function generateStaticParams() {
   return lessons.map((l) => ({ slug: l.slug }));
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const lesson = getLessonBySlug(slug);
   if (!lesson) return {};
@@ -28,13 +30,14 @@ export default async function LessonPage({ params }: PageProps) {
   const { slug } = await params;
   const lesson = getLessonBySlug(slug);
   if (!lesson) notFound();
+  const codeServerUrl = process.env.CODE_SERVER_URL || "http://localhost:8080";
 
   return (
     <>
-      <TopBar lessonTitle={lesson.title} />
+      <TopBar lessonTitle={lesson.title} codeServerUrl={codeServerUrl} />
       <ResizableLayout
         left={<LessonPanel lesson={lesson} />}
-        right={<CodeServerPanel />}
+        right={<CodeServerPanel url={codeServerUrl} />}
       />
     </>
   );

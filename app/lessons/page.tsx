@@ -5,13 +5,16 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Lessons — CodeLearn",
-  description: "Browse interactive coding lessons with a live VS Code environment.",
+  description:
+    "Browse interactive coding lessons with a live VS Code environment.",
 };
 
 export default function LessonsPage() {
+  const codeServerUrl = process.env.CODE_SERVER_URL || "http://localhost:8080";
+
   return (
     <>
-      <TopBar />
+      <TopBar codeServerUrl={codeServerUrl} />
       <main className="catalog-page">
         {/* Hero */}
         <section className="catalog-hero">
@@ -57,7 +60,13 @@ export default function LessonsPage() {
                 >
                   {s.value}
                 </div>
-                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: "var(--text-muted)",
+                    marginTop: 2,
+                  }}
+                >
                   {s.label}
                 </div>
               </div>
@@ -85,8 +94,8 @@ export default function LessonsPage() {
                       lesson.difficulty === "Beginner"
                         ? "badge-green"
                         : lesson.difficulty === "Intermediate"
-                        ? "badge-cyan"
-                        : "badge-purple"
+                          ? "badge-cyan"
+                          : "badge-purple"
                     }`}
                   >
                     {lesson.difficulty}

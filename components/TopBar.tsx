@@ -5,11 +5,13 @@ import { usePathname } from "next/navigation";
 
 interface TopBarProps {
   lessonTitle?: string;
+  codeServerUrl?: string;
 }
 
-export default function TopBar({ lessonTitle }: TopBarProps) {
+export default function TopBar({ lessonTitle, codeServerUrl }: TopBarProps) {
   const pathname = usePathname();
   const isLesson = pathname.startsWith("/lessons/");
+  const openUrl = codeServerUrl || "http://localhost:8080";
 
   return (
     <header className="topbar">
@@ -28,7 +30,11 @@ export default function TopBar({ lessonTitle }: TopBarProps) {
             /
           </span>
           <span
-            style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 500 }}
+            style={{
+              fontSize: 13,
+              color: "var(--text-secondary)",
+              fontWeight: 500,
+            }}
           >
             {lessonTitle}
           </span>
@@ -47,11 +53,7 @@ export default function TopBar({ lessonTitle }: TopBarProps) {
         </button>
       </Link>
 
-      <a
-        href={process.env.NEXT_PUBLIC_CODE_SERVER_URL || "http://localhost:8080"}
-        target="_blank"
-        rel="noopener noreferrer"
-      >
+      <a href={openUrl} target="_blank" rel="noopener noreferrer">
         <button
           className="btn btn-ghost"
           style={{ padding: "5px 12px", fontSize: 12 }}
