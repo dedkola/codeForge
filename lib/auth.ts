@@ -3,14 +3,24 @@ import { dash } from "@better-auth/infra";
 import { Pool } from "pg";
 
 const envBaseUrl = process.env.BETTER_AUTH_URL;
+const isDockerBuild = process.env.DOCKER_BUILD === "true";
 const normalizedBaseUrl = envBaseUrl
   ? envBaseUrl.startsWith("http://") || envBaseUrl.startsWith("https://")
     ? envBaseUrl
     : `https://${envBaseUrl}`
-  : undefined;
+  : isDockerBuild
+    ? "http://localhost:3000"
+    : undefined;
+
+const authSecret =
+  process.env.BETTER_AUTH_SECRET ||
+  (isDockerBuild
+    ? "docker-build-placeholder-secret-change-in-runtime"
+    : undefined);
 
 export const auth = betterAuth({
   appName: "CodeForge",
+  secret: authSecret,
   baseURL: normalizedBaseUrl,
   database: new Pool({
     connectionString: process.env.DATABASE_URL,

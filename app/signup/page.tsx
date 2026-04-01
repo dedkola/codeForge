@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import AuthPanel from "@/components/AuthPanel";
 
 export const metadata: Metadata = {
@@ -7,5 +8,9 @@ export const metadata: Metadata = {
 };
 
 export default function SignUpPage() {
-  return <AuthPanel mode="signup" />;
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh" }} />}>
+      <AuthPanel mode="signup" />
+    </Suspense>
+  );
 }
