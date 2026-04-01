@@ -18,7 +18,7 @@ spec:
         - name: ghcr-secret
       containers:
         - name: codeforge
-          image: ghcr.io/dedkola/codeforge:20260401094422-bb1ad33 # {"$imagepolicy": "flux-system:codeforge"}
+          image: ghcr.io/dedkola/codeforge:20260401094629-209387e # {"$imagepolicy": "flux-system:codeforge"}
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
