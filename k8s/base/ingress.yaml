@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: codeforge-ingress
+  namespace: codelearn
+  labels:
+    app: codeforge
+  annotations:
+    # Uncomment based on your ingress controller
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: "lan-ca"
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  ingressClassName: nginx # Change based on your ingress controller (nginx, traefik, etc.)
+  rules:
+    - host: codeforge.tkweb.site # Dev environment hostname
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: codeforge-service
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - codeforge.tkweb.site
+      secretName: codeforge-tls

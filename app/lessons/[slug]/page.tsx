@@ -10,7 +10,7 @@ import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { ensureUserCodeServer } from "@/lib/code-server-manager";
 import { generateProxyToken } from "@/lib/code-server-token";
-import { userSlug } from "@/lib/code-server-k8s";
+import { buildUserCodeServerProxyUrl } from "@/lib/code-server-url";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -50,9 +50,7 @@ export default async function LessonPage({ params }: PageProps) {
   let codeServerUrl: string | undefined;
   if (instance.status === "ready") {
     const token = await generateProxyToken(session.user.id, instance.svcName);
-    const proxyBase = (process.env.CS_PROXY_URL ?? "https://cs-proxy.tkweb.site").replace(/\/$/, "");
-    const proxySlug = userSlug(session.user.id);
-    codeServerUrl = `${proxyBase}/u/${proxySlug}/?token=${token}`;
+    codeServerUrl = buildUserCodeServerProxyUrl(session.user.id, token);
   }
 
   return (

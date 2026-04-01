@@ -6,6 +6,8 @@
 - Code-server image is now pinned by default (`codercom/code-server:4.105.2`) instead of `latest`.
 - API and manager idle/timeout/proxy behavior now consume shared config (no duplicated hardcoded values).
 - K8s baseline now includes `NetworkPolicy` and `LimitRange` for per-user workloads via `k8s/kustomization.yaml`.
+- K8s now has `base` + `overlays` structure; `kubectl apply -k k8s` deploys the full stack umbrella.
+- Deployment order is now explicit: apply `k8s/secrets.yaml` first, then apply Kustomize overlay/umbrella.
 
 This guide remains valid; the next refactor phases will split docs into dedicated architecture and runbook files.
 

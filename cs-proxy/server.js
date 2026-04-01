@@ -72,7 +72,8 @@ async function verifyToken(rawToken) {
 }
 
 async function resolveSession(req, route) {
-  const rawQueryToken = typeof route.query.token === "string" ? route.query.token : null;
+  const rawQueryToken =
+    typeof route.query.token === "string" ? route.query.token : null;
   const rawCookieToken = tokenFromCookie(req);
   const rawToken = rawQueryToken || rawCookieToken;
   if (!rawToken) return { status: "unauthorized" };
@@ -105,6 +106,22 @@ function sendWsAuthError(socket, status) {
   socket.destroy();
 }
 
+function buildSessionCookie(slug, token) {
+  const parts = [
+    `cs_session=${token}`,
+    `Path=/u/${slug}`,
+    "HttpOnly",
+    "Secure",
+    "SameSite=None",
+    "Max-Age=28800",
+  ];
+
+  // Improves iframe cookie behavior in modern browsers that support CHIPS.
+  parts.push("Partitioned");
+
+  return parts.join("; ");
+}
+
 const server = http.createServer(async (req, res) => {
   const route = parseRoute(req.url || "/");
   if (!route) {
@@ -123,24 +140,12 @@ const server = http.createServer(async (req, res) => {
   if (fromQuery) {
     const queryWithoutToken = { ...route.query };
     delete queryWithoutToken.token;
-    const cleanQuery = new URLSearchParams();
-    for (const [key, value] of Object.entries(queryWithoutToken)) {
-      if (value === undefined) continue;
-      if (Array.isArray(value)) {
-        for (const item of value) cleanQuery.append(key, String(item));
-      } else {
-        cleanQuery.append(key, String(value));
-      }
-    }
-    const redirectPath = cleanQuery.toString()
-      ? `${route.pathname}?${cleanQuery.toString()}`
-      : route.pathname;
-
-    res.writeHead(302, {
-      Location: redirectPath,
-      "Set-Cookie": `cs_session=${payload.rawToken}; Path=/u/${route.slug}; HttpOnly; Secure; SameSite=None; Max-Age=28800`,
-    });
-    res.end();
+    sanitizeRequestUrlForUpstream(req, route.suffix, queryWithoutToken);
+    res.setHeader(
+      "Set-Cookie",
+      buildSessionCookie(route.slug, payload.rawToken),
+    );
+    proxy.web(req, res, { target: buildTarget(payload.svc) });
     return;
   }
 

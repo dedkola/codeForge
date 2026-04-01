@@ -39,10 +39,18 @@ These values replace hardcoded runtime values in API routes and orchestration co
 
 ## Kubernetes Safety Baseline
 
-`k8s/kustomization.yaml` now includes:
+The platform includes:
 
 - `networkpolicy-code-server-user.yaml`: only allows ingress to user code-server pods from `cs-proxy` pods.
 - `limitrange-code-server-user.yaml`: enforces container default/min/max resource guardrails.
+
+Kustomize layout:
+
+- `k8s/base`: shared stack resources
+- `k8s/base/cs-proxy`: canonical cs-proxy Kubernetes manifests for overlays
+- `k8s/overlays/prod`: production stack
+- `k8s/overlays/dev`: development stack
+- `k8s/`: umbrella entrypoint (currently maps to prod overlay)
 
 ## Local Development
 
@@ -67,4 +75,11 @@ pnpm build
 - K3s: runtime execution.
 - Cloudflared: domain tunnel to ingress.
 
-For operational details and migration notes, see `UPDATE.md`.
+Deploy everything together:
+
+```bash
+kubectl apply -f k8s/secrets.yaml
+kubectl apply -k k8s
+```
+
+For operational details and migration notes, see `UPDATE.md` and `docs/REFRACTOR-DEPLOYMENT-GUIDE.md`.

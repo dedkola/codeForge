@@ -3,8 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { ensureUserCodeServer } from "@/lib/code-server-manager";
 import { generateProxyToken } from "@/lib/code-server-token";
-import { userSlug } from "@/lib/code-server-k8s";
-import { getCodeServerProxyBaseUrl } from "@/lib/code-server-config";
+import { buildUserCodeServerProxyUrl } from "@/lib/code-server-url";
 
 export async function POST() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -17,9 +16,7 @@ export async function POST() {
   let proxyUrl: string | undefined;
   if (result.status === "ready") {
     const token = await generateProxyToken(session.user.id, result.svcName);
-    const proxyBase = getCodeServerProxyBaseUrl();
-    const slug = userSlug(session.user.id);
-    proxyUrl = `${proxyBase}/u/${slug}/?token=${token}`;
+    proxyUrl = buildUserCodeServerProxyUrl(session.user.id, token);
   }
 
   return NextResponse.json({

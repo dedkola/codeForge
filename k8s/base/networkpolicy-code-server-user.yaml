@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: code-server-user-ingress
+  namespace: codelearn
+spec:
+  podSelector:
+    matchLabels:
+      app: code-server-user
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: cs-proxy
+      ports:
+        - protocol: TCP
+          port: 80

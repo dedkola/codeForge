@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cs-proxy
+  namespace: codelearn
+  labels:
+    app: cs-proxy
+spec:
+  type: ClusterIP
+  selector:
+    app: cs-proxy
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
