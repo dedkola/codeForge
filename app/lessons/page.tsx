@@ -2,6 +2,9 @@ import Link from "next/link";
 import TopBar from "@/components/TopBar";
 import { lessons } from "@/data/lessons";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "Lessons — CodeLearn",
@@ -9,7 +12,15 @@ export const metadata: Metadata = {
     "Browse interactive coding lessons with a live VS Code environment.",
 };
 
-export default function LessonsPage() {
+export default async function LessonsPage() {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (!session) {
+    redirect(`/login?next=${encodeURIComponent("/lessons")}`);
+  }
+
   const codeServerUrl = process.env.CODE_SERVER_URL;
 
   return (

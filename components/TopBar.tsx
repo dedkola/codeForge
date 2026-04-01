@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import AuthStatusActions from "@/components/AuthStatusActions";
 
 interface TopBarProps {
   lessonTitle?: string;
@@ -53,15 +54,19 @@ export default function TopBar({ lessonTitle, codeServerUrl }: TopBarProps) {
         </button>
       </Link>
 
-      <a href={openUrl} target="_blank" rel="noopener noreferrer">
-        <button
-          className="btn btn-ghost"
-          style={{ padding: "5px 12px", fontSize: 12 }}
-          id="nav-open-vscode-btn"
-        >
-          ↗ Open in full screen
-        </button>
-      </a>
+      {openUrl && (
+        <a href={openUrl} target="_blank" rel="noopener noreferrer">
+          <button
+            className="btn btn-ghost"
+            style={{ padding: "5px 12px", fontSize: 12 }}
+            id="nav-open-vscode-btn"
+          >
+            ↗ Open in full screen
+          </button>
+        </a>
+      )}
+
+      <AuthStatusActions />
     </header>
   );
 }

@@ -1,11 +1,13 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
+import { headers } from "next/headers";
 import { lessons, getLessonBySlug } from "@/data/lessons";
 import TopBar from "@/components/TopBar";
 import LessonPanel from "@/components/LessonPanel";
 import ResizableLayout from "@/components/ResizableLayout";
 import CodeServerPanel from "@/components/CodeServerPanel";
 import type { Metadata } from "next";
+import { auth } from "@/lib/auth";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -29,6 +31,14 @@ export async function generateMetadata({
 
 export default async function LessonPage({ params }: PageProps) {
   const { slug } = await params;
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (!session) {
+    redirect(`/login?next=${encodeURIComponent(`/lessons/${slug}`)}`);
+  }
+
   const lesson = getLessonBySlug(slug);
   if (!lesson) notFound();
   await connection(); // opt into dynamic rendering so CODE_SERVER_URL is read at request time from k8s secret

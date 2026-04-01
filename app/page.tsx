@@ -19,9 +19,22 @@ export default function LandingPage() {
           <span className="logo-icon">⚡</span>
           <span className="gradient-text">CodeLearn</span>
         </Link>
-        <Link href="/lessons" className="btn btn-primary" style={{ padding: "6px 18px", fontSize: 13 }}>
-          Start Learning
-        </Link>
+        <div style={{ display: "flex", gap: 10 }}>
+          <Link
+            href="/login"
+            className="btn btn-ghost"
+            style={{ padding: "6px 18px", fontSize: 13 }}
+          >
+            Log In
+          </Link>
+          <Link
+            href="/lessons"
+            className="btn btn-primary"
+            style={{ padding: "6px 18px", fontSize: 13 }}
+          >
+            Start Learning
+          </Link>
+        </div>
       </nav>
 
       {/* Hero */}
@@ -30,18 +43,25 @@ export default function LandingPage() {
           <span className="badge badge-purple">✦ Free &amp; Interactive</span>
         </p>
         <h1>
-          Master DevOps by{" "}
-          <span className="gradient-text">building</span>
+          Master DevOps by <span className="gradient-text">building</span>
         </h1>
         <p>
           Hands-on coding lessons with a live VS Code environment right in your
           browser. No setup, no context switching — just open and code.
         </p>
         <div className="landing-ctas">
-          <Link href="/lessons" className="btn btn-primary" style={{ padding: "10px 28px", fontSize: 15 }}>
+          <Link
+            href="/lessons"
+            className="btn btn-primary"
+            style={{ padding: "10px 28px", fontSize: 15 }}
+          >
             Start Learning →
           </Link>
-          <Link href="/lessons" className="btn btn-ghost" style={{ padding: "10px 28px", fontSize: 15 }}>
+          <Link
+            href="/lessons"
+            className="btn btn-ghost"
+            style={{ padding: "10px 28px", fontSize: 15 }}
+          >
             Browse Lessons
           </Link>
         </div>
@@ -106,8 +126,8 @@ export default function LandingPage() {
                       lesson.difficulty === "Beginner"
                         ? "badge-green"
                         : lesson.difficulty === "Intermediate"
-                        ? "badge-cyan"
-                        : "badge-purple"
+                          ? "badge-cyan"
+                          : "badge-purple"
                     }`}
                   >
                     {lesson.difficulty}
@@ -132,7 +152,11 @@ export default function LandingPage() {
           Ready to start <span className="gradient-text">coding</span>?
         </h2>
         <p>Jump into your first lesson — it only takes a few minutes.</p>
-        <Link href="/lessons" className="btn btn-primary" style={{ padding: "12px 32px", fontSize: 15 }}>
+        <Link
+          href="/lessons"
+          className="btn btn-primary"
+          style={{ padding: "12px 32px", fontSize: 15 }}
+        >
           Get Started →
         </Link>
       </section>
