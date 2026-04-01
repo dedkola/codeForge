@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { lessons, getLessonBySlug } from "@/data/lessons";
 import TopBar from "@/components/TopBar";
 import LessonPanel from "@/components/LessonPanel";
@@ -30,6 +31,7 @@ export default async function LessonPage({ params }: PageProps) {
   const { slug } = await params;
   const lesson = getLessonBySlug(slug);
   if (!lesson) notFound();
+  await connection(); // opt into dynamic rendering so CODE_SERVER_URL is read at request time from k8s secret
   const codeServerUrl = process.env.CODE_SERVER_URL;
 
   return (
