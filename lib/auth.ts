@@ -10,12 +10,23 @@ const normalizedBaseUrl = envBaseUrl
   : undefined;
 
 export const auth = betterAuth({
+  appName: "CodeForge",
   baseURL: normalizedBaseUrl,
   database: new Pool({
     connectionString: process.env.DATABASE_URL,
   }),
   advanced: {
     trustedProxyHeaders: true,
+    ipAddress: {
+      // For Cloudflare
+      ipAddressHeaders: ["cf-connecting-ip", "x-forwarded-for"],
+
+      // For Vercel
+      // ipAddressHeaders: ["x-vercel-forwarded-for", "x-forwarded-for"],
+
+      // For AWS/Generic
+      // ipAddressHeaders: ["x-forwarded-for"],
+    },
   },
   emailAndPassword: {
     enabled: true,
