@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
+const isDockerBuild = process.env.DOCKER_BUILD === "true";
+
 const nextConfig: NextConfig = {
+  output: isDockerBuild ? "standalone" : undefined,
   allowedDevOrigins: ["192.168.0.192"],
   async headers() {
     return [
