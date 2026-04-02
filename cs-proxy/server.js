@@ -199,14 +199,19 @@ proxy.on("proxyRes", (proxyRes, req) => {
     (proxyRes.headers.location || "").includes("/login")
   ) {
     const route = parseRoute(req.originalUrl || req.url || "/");
-    if (route) {
-      csSessionCache.delete(route.slug);
+    const slug = route ? route.slug : req._csSlug;
+    if (slug) {
+      csSessionCache.delete(slug);
     }
   }
 });
 
 function expectedServiceForSlug(slug) {
   return `cs-svc-${slug}`;
+}
+
+function slugFromSvc(svc) {
+  return svc.replace(/^cs-svc-/, "");
 }
 
 function parseRoute(url) {
@@ -302,6 +307,21 @@ async function resolveSession(req, route) {
   return { status: "unauthorized" };
 }
 
+/**
+ * Resolve session from cookie alone (for non-/u/<slug>/ paths).
+ * Used for code-server sub-resources and WebSocket connections
+ * that don't include the /u/<slug>/ prefix in their URL.
+ */
+async function resolveSessionFromCookie(req) {
+  const rawToken = tokenFromCookie(req);
+  if (!rawToken) return { status: "unauthorized" };
+
+  const payload = await verifyToken(rawToken);
+  if (!payload) return { status: "unauthorized" };
+
+  return { status: "ok", payload };
+}
+
 function sendHttpAuthError(res, status) {
   const code = status === "forbidden" ? 403 : 401;
   const body = status === "forbidden" ? "Forbidden" : "Unauthorized";
@@ -319,7 +339,7 @@ function sendWsAuthError(socket, status) {
 function buildSessionCookie(slug, token) {
   const parts = [
     `cs_session=${token}`,
-    `Path=/u/${slug}`,
+    `Path=/`,
     "HttpOnly",
     "Secure",
     "SameSite=None",
@@ -334,9 +354,28 @@ function buildSessionCookie(slug, token) {
 
 const server = http.createServer(async (req, res) => {
   const route = parseRoute(req.url || "/");
+
+  // Fallback for non-/u/<slug>/ paths (code-server sub-resources & API calls).
+  // code-server doesn't support --base-path, so the browser fetches static
+  // assets and opens WebSockets at root-relative paths like /static/... or /?...
   if (!route) {
-    res.writeHead(404, { "Content-Type": "text/plain" });
-    res.end("Not Found");
+    const session = await resolveSessionFromCookie(req);
+    if (session.status !== "ok") {
+      res.writeHead(404, { "Content-Type": "text/plain" });
+      res.end("Not Found");
+      return;
+    }
+
+    const { payload } = session;
+    const slug = slugFromSvc(payload.svc);
+
+    const csCookie = await ensureCsSession(payload.svc, slug);
+    if (csCookie) injectCsSessionCookie(req, csCookie);
+
+    // Tag request so proxyRes stale-session handler can clear the cache
+    req._csSlug = slug;
+
+    proxy.web(req, res, { target: buildTarget(payload.svc) });
     return;
   }
 
@@ -373,9 +412,24 @@ const server = http.createServer(async (req, res) => {
 
 server.on("upgrade", async (req, socket, head) => {
   const route = parseRoute(req.url || "/");
+
+  // Fallback for WebSocket connections without /u/<slug>/ prefix.
+  // code-server opens its main WebSocket at wss://host/?reconnectionToken=...
   if (!route) {
-    socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
-    socket.destroy();
+    const session = await resolveSessionFromCookie(req);
+    if (session.status !== "ok") {
+      socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+
+    const { payload } = session;
+    const slug = slugFromSvc(payload.svc);
+
+    const wsCsCookie = await ensureCsSession(payload.svc, slug);
+    if (wsCsCookie) injectCsSessionCookie(req, wsCsCookie);
+
+    proxy.ws(req, socket, head, { target: buildTarget(payload.svc) });
     return;
   }
 
