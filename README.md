@@ -28,7 +28,7 @@ The repository is being refactored toward these boundaries:
 
 Centralized in `lib/code-server-config.ts`:
 
-- `CODE_SERVER_IMAGE` (default `codercom/code-server:4.105.2`)
+- `CODE_SERVER_IMAGE` (default `ghcr.io/coder/code-server:4.105.2`)
 - `CODE_SERVER_STORAGE_CLASS` (default `local-path`)
 - `CODE_SERVER_PVC_SIZE` (default `1Gi`)
 - `CODE_SERVER_MAX_IDLE_MINUTES` (default `120`)

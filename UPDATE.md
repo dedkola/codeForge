@@ -3,7 +3,7 @@
 ## Refactor status (April 2026)
 
 - Runtime policy values moved to `lib/code-server-config.ts`.
-- Code-server image is now pinned by default (`codercom/code-server:4.105.2`) instead of `latest`.
+- Code-server image is now pinned by default (`ghcr.io/coder/code-server:4.105.2`) instead of `latest`.
 - API and manager idle/timeout/proxy behavior now consume shared config (no duplicated hardcoded values).
 - K8s baseline now includes `NetworkPolicy` and `LimitRange` for per-user workloads via `k8s/kustomization.yaml`.
 - K8s now has `base` + `overlays` structure; `kubectl apply -k k8s` deploys the full stack umbrella.
@@ -13,7 +13,7 @@ This guide remains valid; the next refactor phases will split docs into dedicate
 
 ## How it all fits together
 
-```
+```text
 User browser
     │
     ├── https://codeforge.tkweb.site  (Next.js app)
@@ -60,14 +60,16 @@ Everything lives in the `codelearn` namespace:
 2. The Next.js server calls `ensureUserCodeServer(userId)`:
    - Computes a deterministic 12-char hex slug: `sha256(userId).slice(0,12)`
    - Creates a PVC `cs-pvc-<slug>` (1 Gi, `local-path`, persists across pod restarts)
-   - Creates a pod `cs-<slug>` running `codercom/code-server:latest`  
-     workspace dir: `/home/coder/project` (mounted from PVC)
-   - Creates a ClusterIP service `cs-svc-<slug>` pointing at that pod
-   - Waits up to 15 s for the pod readiness probe to pass
-3. App generates a signed JWT: `{ sub: userId, svc: "cs-svc-<slug>", exp: 8h }`
-4. Frontend renders an `<iframe>` pointing to `https://cs-proxy.tkweb.site/u/<slug>/?token=<JWT>`
-5. cs-proxy verifies JWT, validates that path slug matches `svc`, sets `cs_session` cookie **scoped to `/u/<slug>`**, then redirects to `https://cs-proxy.tkweb.site/u/<slug>/`
-6. All subsequent requests from within the iframe use the cookie on that path; cs-proxy re-validates slug ↔ service mapping and proxies to `http://cs-svc-<slug>.codelearn.svc.cluster.local:80`
+
+- Creates a pod `cs-<slug>` running `ghcr.io/coder/code-server:4.105.2`  
+  workspace dir: `/home/coder/project` (mounted from PVC)
+- Creates a ClusterIP service `cs-svc-<slug>` pointing at that pod
+- Waits up to 15 s for the pod readiness probe to pass
+
+1. App generates a signed JWT: `{ sub: userId, svc: "cs-svc-<slug>", exp: 8h }`
+1. Frontend renders an `<iframe>` pointing to `https://cs-proxy.tkweb.site/u/<slug>/?token=<JWT>`
+1. cs-proxy verifies JWT, validates that path slug matches `svc`, sets `cs_session` cookie **scoped to `/u/<slug>`**, then redirects to `https://cs-proxy.tkweb.site/u/<slug>/`
+1. All subsequent requests from within the iframe use the cookie on that path; cs-proxy re-validates slug ↔ service mapping and proxies to `http://cs-svc-<slug>.codelearn.svc.cluster.local:80`
 
 **Persistence:** The PVC is never deleted automatically. The pod is deleted by the CronJob after 120 min idle (no lesson page open), but the next visit recreates the pod and remounts the same PVC — files are always there.
 

@@ -6,7 +6,7 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
 }
 
 export const CODE_SERVER_IMAGE =
-  process.env.CODE_SERVER_IMAGE ?? "codercom/code-server:4.105.2";
+  process.env.CODE_SERVER_IMAGE ?? "ghcr.io/coder/code-server:4.105.2";
 
 export const CODE_SERVER_STORAGE_CLASS =
   process.env.CODE_SERVER_STORAGE_CLASS ?? "local-path";

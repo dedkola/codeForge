@@ -11,7 +11,8 @@ Each authenticated user gets their own isolated code-server pod, created dynamic
 ## Per-User Resources (created dynamically)
 
 For each user, the app creates:
-- **Pod** `cs-<userSlug>`: `codercom/code-server:latest` with `--auth=none`
+
+- **Pod** `cs-<userSlug>`: `ghcr.io/coder/code-server:4.105.2` with password auth
 - **PVC** `cs-pvc-<userSlug>`: 1Gi persistent workspace
 - **Service** `cs-svc-<userSlug>`: ClusterIP routing to the pod
 
@@ -20,16 +21,19 @@ These are managed by the Next.js app and cleaned up by a CronJob (see `../k8s/cl
 ## Prerequisites
 
 1. Apply the namespace:
+
    ```bash
    kubectl apply -f namespace.yaml
    ```
 
 2. Apply RBAC so the app can manage pods:
+
    ```bash
    kubectl apply -f ../k8s/rbac.yaml
    ```
 
 3. Deploy the proxy service:
+
    ```bash
    kubectl apply -f ../cs-proxy/k8s/
    ```

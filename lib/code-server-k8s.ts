@@ -32,6 +32,52 @@ function userResourceLabels(slug: string): Record<string, string> {
   };
 }
 
+function shouldRecreatePodOnState(phase: string | undefined): boolean {
+  return phase === "Failed" || phase === "Succeeded";
+}
+
+function hasRecoverableContainerError(
+  containerStatuses:
+    | Array<{
+        state?: {
+          waiting?: {
+            reason?: string;
+          };
+        };
+      }>
+    | undefined,
+): boolean {
+  const recoverableReasons = new Set([
+    "ErrImagePull",
+    "ImagePullBackOff",
+    "CrashLoopBackOff",
+    "CreateContainerConfigError",
+    "CreateContainerError",
+    "RunContainerError",
+    "InvalidImageName",
+  ]);
+
+  return (containerStatuses ?? []).some((status) => {
+    const reason = status.state?.waiting?.reason;
+    return !!reason && recoverableReasons.has(reason);
+  });
+}
+
+async function waitForPodDeletion(
+  name: string,
+  timeoutMs = 10000,
+): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      await coreV1Api.readNamespacedPod({ name, namespace: NAMESPACE });
+      await new Promise((r) => setTimeout(r, 500));
+    } catch {
+      return;
+    }
+  }
+}
+
 export async function createPVC(userId: string): Promise<void> {
   const { pvc, slug } = resourceNames(userId);
   try {
@@ -64,8 +110,30 @@ export async function createPVC(userId: string): Promise<void> {
 export async function createPod(userId: string): Promise<void> {
   const { pod, pvc, slug } = resourceNames(userId);
   try {
-    await coreV1Api.readNamespacedPod({ name: pod, namespace: NAMESPACE });
-    return; // already exists
+    const existing = await coreV1Api.readNamespacedPod({
+      name: pod,
+      namespace: NAMESPACE,
+    });
+
+    const phase = existing.status?.phase;
+    const containerStatuses =
+      existing.status?.containerStatuses?.map((status) => ({
+        state: {
+          waiting: {
+            reason: status.state?.waiting?.reason,
+          },
+        },
+      })) ?? [];
+
+    if (
+      !shouldRecreatePodOnState(phase) &&
+      !hasRecoverableContainerError(containerStatuses)
+    ) {
+      return; // healthy enough to keep
+    }
+
+    await coreV1Api.deleteNamespacedPod({ name: pod, namespace: NAMESPACE });
+    await waitForPodDeletion(pod);
   } catch {
     // does not exist, create it
   }
