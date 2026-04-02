@@ -19,7 +19,7 @@ spec:
         - name: ghcr-secret
       containers:
         - name: cs-proxy
-          image: ghcr.io/dedkola/codeforge/cs-proxy:20260402115825-6932623 # {"$imagepolicy": "flux-system:codeforge-cs-proxy"}
+          image: ghcr.io/dedkola/codeforge/cs-proxy:20260402123000-d27e99a # {"$imagepolicy": "flux-system:codeforge-cs-proxy"}
           ports:
             - containerPort: 8080
           env:
