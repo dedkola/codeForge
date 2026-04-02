@@ -105,9 +105,13 @@ const proxy = httpProxy.createProxyServer({
 
 proxy.on("error", (err, req, res) => {
   console.error("Proxy error:", err.message);
-  if (res.writeHead) {
+  if (typeof res.writeHead === "function") {
+    // HTTP response
     res.writeHead(502, { "Content-Type": "text/plain" });
     res.end("Bad Gateway");
+  } else {
+    // WebSocket socket — destroy so the browser gets a clean close instead of 1006
+    res.destroy();
   }
 });
 
