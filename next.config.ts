@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const csDomain = process.env.CODE_SERVER_DOMAIN ?? "cs.tkweb.site";
+const csDomain = process.env.CODE_SERVER_DOMAIN ?? "tkweb.site";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["192.168.0.192"],

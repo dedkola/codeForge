@@ -15,14 +15,14 @@ Browser
   │     ├── /api/code-server/status  → Poll readiness
   │     └── /api/code-server/cleanup → Delete idle resources
   │
-  └── iframe → https://{slug}.cs.tkweb.site → code-server pod (--auth=none)
+  └── iframe → https://{slug}.tkweb.site → code-server pod (--auth=none)
 
 K3s Cluster
   ├── Per-user: Pod + Service + Ingress (created dynamically by API)
   ├── PVCs (persistent /home/coder/project storage)
   ├── Cleanup CronJob (every 30 min)
   ├── RBAC, NetworkPolicy, LimitRange
-  └── Wildcard TLS cert (*.cs.tkweb.site via cert-manager)
+  └── Wildcard TLS cert (*.tkweb.site via cert-manager)
 ```
 
 Key decisions:
@@ -35,8 +35,8 @@ Key decisions:
 ## Prerequisites
 
 1. **K3s cluster** with nginx-ingress-controller and cert-manager
-2. **Wildcard DNS**: `*.cs.tkweb.site` → K3s ingress controller IP
-3. **Wildcard TLS cert**: cert-manager Certificate for `*.cs.tkweb.site` → Secret `cs-wildcard-tls`
+2. **Wildcard DNS**: `*.tkweb.site` → K3s ingress controller IP
+3. **Wildcard TLS cert**: cert-manager Certificate for `*.tkweb.site` → Secret `cs-wildcard-tls`
 4. **PostgreSQL** accessible from wherever Next.js is hosted
 
 ## Quick Start
@@ -80,7 +80,7 @@ Centralized in `lib/code-server-config.ts`:
 
 | Variable                       | Default                             | Description                             |
 | ------------------------------ | ----------------------------------- | --------------------------------------- |
-| `CODE_SERVER_DOMAIN`           | `cs.tkweb.site`                     | Wildcard domain for per-user subdomains |
+| `CODE_SERVER_DOMAIN`           | `tkweb.site`                        | Wildcard domain for per-user subdomains |
 | `CODE_SERVER_IMAGE`            | `ghcr.io/coder/code-server:4.105.2` | Container image                         |
 | `CODE_SERVER_STORAGE_CLASS`    | `local-path`                        | PVC storage class                       |
 | `CODE_SERVER_PVC_SIZE`         | `1Gi`                               | Workspace storage size                  |
