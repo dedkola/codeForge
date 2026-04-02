@@ -191,10 +191,9 @@ proxy.on("error", (err, req, res) => {
 });
 
 // Detect stale code-server session: if code-server redirects to /login,
-// the cached cookie is invalid (pod was restarted). Clear it and retry
-// transparent login, then redirect the browser back to the original URL
-// instead of letting the 302→/login through (which breaks the /u/<slug> prefix).
-proxy.on("proxyRes", async (proxyRes, req, res) => {
+// the cached cookie is invalid (pod was restarted). Clear it so the next
+// request performs a fresh transparent login.
+proxy.on("proxyRes", (proxyRes, req) => {
   if (
     proxyRes.statusCode === 302 &&
     (proxyRes.headers.location || "").includes("/login")
@@ -202,26 +201,6 @@ proxy.on("proxyRes", async (proxyRes, req, res) => {
     const route = parseRoute(req.originalUrl || req.url || "/");
     if (route) {
       csSessionCache.delete(route.slug);
-    }
-
-    // Suppress the redirect — tell the browser to retry the same URL.
-    // This avoids navigating the iframe to /login (which lacks /u/<slug> prefix).
-    if (typeof res.writeHead === "function" && !res.headersSent) {
-      // Consume the upstream body so the socket is freed
-      proxyRes.resume();
-
-      res.writeHead(503, {
-        "Content-Type": "text/html",
-        "Retry-After": "2",
-      });
-      res.end(
-        `<!DOCTYPE html><html><head><meta charset="utf-8">` +
-          `<meta http-equiv="refresh" content="2"></head>` +
-          `<body style="background:#1e1e2e;color:#cdd6f4;font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0">` +
-          `<div style="text-align:center"><p>Reconnecting to workspace…</p>` +
-          `<p style="font-size:13px;opacity:.6">Session expired, logging back in automatically.</p></div>` +
-          `</body></html>`,
-      );
     }
   }
 });
