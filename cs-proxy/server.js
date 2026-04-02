@@ -20,12 +20,30 @@ function derivePassword(slug) {
 
 /* ── Transparent login to code-server (password auth) ── */
 
-/** slug → code-server "key" cookie value */
+/** slug → code-server auth cookie pair (e.g. "code-server-session=..." or legacy "key=...") */
 const csSessionCache = new Map();
+
+function extractCodeServerAuthCookie(setCookies) {
+  if (!Array.isArray(setCookies)) return null;
+
+  // Prefer modern cookie name, then fallback to legacy key.
+  const names = ["code-server-session", "key"];
+  for (const name of names) {
+    const prefix = `${name}=`;
+    const match = setCookies.find(
+      (sc) => typeof sc === "string" && sc.startsWith(prefix),
+    );
+    if (!match) continue;
+    const pair = match.split(";", 1)[0];
+    if (pair) return pair;
+  }
+
+  return null;
+}
 
 /**
  * POST /login on the code-server pod to obtain its session cookie.
- * Returns the raw "key" cookie value or null on failure.
+ * Returns a cookie pair (name=value) or null on failure.
  */
 function loginToCodeServer(svc, slug) {
   return new Promise((resolve) => {
@@ -49,14 +67,7 @@ function loginToCodeServer(svc, slug) {
         res.resume();
 
         const setCookies = res.headers["set-cookie"] || [];
-        for (const sc of setCookies) {
-          const match = sc.match(/^key=([^;]+)/);
-          if (match) {
-            resolve(match[1]);
-            return;
-          }
-        }
-        resolve(null);
+        resolve(extractCodeServerAuthCookie(setCookies));
       },
     );
 
@@ -66,8 +77,8 @@ function loginToCodeServer(svc, slug) {
 }
 
 /**
- * Ensure we have a cached code-server session cookie for the given slug.
- * Returns the cookie value or null.
+ * Ensure we have a cached code-server auth cookie for the given slug.
+ * Returns a cookie pair (name=value) or null.
  */
 async function ensureCsSession(svc, slug) {
   let cookie = csSessionCache.get(slug);
@@ -79,13 +90,11 @@ async function ensureCsSession(svc, slug) {
 }
 
 /**
- * Inject the code-server "key" cookie into the request headers.
+ * Inject the code-server auth cookie pair into the request headers.
  */
 function injectCsSessionCookie(req, csCookie) {
   const existing = req.headers.cookie || "";
-  req.headers.cookie = existing
-    ? `${existing}; key=${csCookie}`
-    : `key=${csCookie}`;
+  req.headers.cookie = existing ? `${existing}; ${csCookie}` : csCookie;
 }
 
 const proxy = httpProxy.createProxyServer({
