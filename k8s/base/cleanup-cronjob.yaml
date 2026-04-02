@@ -20,12 +20,12 @@ spec:
                 - -X
                 - POST
                 - -H
-                - "Authorization: Bearer $(CS_PROXY_SECRET)"
+                - "Authorization: Bearer $(CODE_SERVER_CLEANUP_SECRET)"
                 - "http://codeforge-service.codelearn.svc.cluster.local:3000/api/code-server/cleanup"
               env:
-                - name: CS_PROXY_SECRET
+                - name: CODE_SERVER_CLEANUP_SECRET
                   valueFrom:
                     secretKeyRef:
                       name: codeforge-secrets
-                      key: CS_PROXY_SECRET
+                      key: CODE_SERVER_CLEANUP_SECRET
           restartPolicy: OnFailure

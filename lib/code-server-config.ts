@@ -23,9 +23,15 @@ export const CODE_SERVER_POD_READY_TIMEOUT_MS = parsePositiveInt(
   15000,
 );
 
-export function getCodeServerProxyBaseUrl(): string {
-  return (process.env.CS_PROXY_URL ?? "https://cs-proxy.tkweb.site").replace(
-    /\/$/,
-    "",
-  );
+export const CODE_SERVER_DOMAIN =
+  process.env.CODE_SERVER_DOMAIN ?? "tkweb.site";
+
+export const CODE_SERVER_TLS_SECRET =
+  process.env.CODE_SERVER_TLS_SECRET ?? "cs-wildcard-tls";
+
+export const CODE_SERVER_CLEANUP_SECRET =
+  process.env.CODE_SERVER_CLEANUP_SECRET ?? "";
+
+export function buildCodeServerUrl(slug: string): string {
+  return `https://${slug}.${CODE_SERVER_DOMAIN}`;
 }

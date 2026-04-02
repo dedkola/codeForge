@@ -3,6 +3,3 @@ kind: Kustomization
 namespace: codelearn
 resources:
   - ../../base
-patches:
-  - path: patch-codeforge-replicas.yaml
-  - path: patch-cs-proxy-replicas.yaml

@@ -3,8 +3,10 @@ import {
   createPVC,
   createPod,
   createService,
+  createIngress,
   deletePod,
   deleteService,
+  deleteIngress,
   getPodStatus,
   waitForPodReady,
 } from "./code-server-k8s";
@@ -15,23 +17,22 @@ import {
   touchLastActive,
   getStaleInstances,
 } from "./code-server-db";
-import { NAMESPACE } from "./k8s";
 import {
   CODE_SERVER_MAX_IDLE_MINUTES,
   CODE_SERVER_POD_READY_TIMEOUT_MS,
+  buildCodeServerUrl,
 } from "./code-server-config";
 
 export interface EnsureResult {
   status: "ready" | "starting" | "error";
-  svcName: string;
-  internalUrl: string;
+  url: string;
 }
 
 export async function ensureUserCodeServer(
   userId: string,
 ): Promise<EnsureResult> {
-  const { pod, svc, pvc } = resourceNames(userId);
-  const internalUrl = `http://${svc}.${NAMESPACE}.svc.cluster.local:80`;
+  const { pod, svc, pvc, slug } = resourceNames(userId);
+  const url = buildCodeServerUrl(slug);
 
   const existing = await getInstanceByUserId(userId);
 
@@ -39,7 +40,7 @@ export async function ensureUserCodeServer(
     const phase = await getPodStatus(userId);
     if (phase === "Running") {
       await touchLastActive(userId);
-      return { status: "ready", svcName: svc, internalUrl };
+      return { status: "ready", url };
     }
     await updateStatus(userId, "pending");
   }
@@ -48,6 +49,7 @@ export async function ensureUserCodeServer(
     await createPVC(userId);
     await createPod(userId);
     await createService(userId);
+    await createIngress(userId);
   } catch (err) {
     console.error(
       `Failed to create code-server resources for user ${userId}:`,
@@ -55,7 +57,7 @@ export async function ensureUserCodeServer(
     );
     await upsertInstance(userId, pod, svc, pvc);
     await updateStatus(userId, "error");
-    return { status: "error", svcName: svc, internalUrl };
+    return { status: "error", url };
   }
 
   await upsertInstance(userId, pod, svc, pvc);
@@ -63,16 +65,17 @@ export async function ensureUserCodeServer(
   const ready = await waitForPodReady(userId, CODE_SERVER_POD_READY_TIMEOUT_MS);
   if (ready) {
     await updateStatus(userId, "running");
-    return { status: "ready", svcName: svc, internalUrl };
+    return { status: "ready", url };
   }
 
   await updateStatus(userId, "pending");
-  return { status: "starting", svcName: svc, internalUrl };
+  return { status: "starting", url };
 }
 
 export async function stopUserCodeServer(userId: string): Promise<void> {
   await deletePod(userId);
   await deleteService(userId);
+  await deleteIngress(userId);
   await updateStatus(userId, "stopped");
 }
 
@@ -86,6 +89,7 @@ export async function cleanupStaleInstances(
     try {
       await deletePod(instance.id);
       await deleteService(instance.id);
+      await deleteIngress(instance.id);
       await updateStatus(instance.id, "stopped");
     } catch (err) {
       console.error(`Failed to cleanup instance for user ${instance.id}:`, err);

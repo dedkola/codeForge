@@ -1,11 +1,12 @@
 import { createHash } from "crypto";
-import { coreV1Api, NAMESPACE } from "./k8s";
+import { getCoreV1Api, getNetworkingV1Api, NAMESPACE } from "./k8s";
 import {
   CODE_SERVER_IMAGE,
   CODE_SERVER_PVC_SIZE,
   CODE_SERVER_STORAGE_CLASS,
+  CODE_SERVER_DOMAIN,
+  CODE_SERVER_TLS_SECRET,
 } from "./code-server-config";
-import { deriveCodeServerPassword } from "./code-server-password";
 
 /** Produce a K8s-safe slug from a user ID (lowercase hex, 12 chars). */
 export function userSlug(userId: string): string {
@@ -18,6 +19,7 @@ export function resourceNames(userId: string) {
     pod: `cs-${slug}`,
     svc: `cs-svc-${slug}`,
     pvc: `cs-pvc-${slug}`,
+    ing: `cs-ing-${slug}`,
     slug,
   };
 }
@@ -70,7 +72,7 @@ async function waitForPodDeletion(
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
-      await coreV1Api.readNamespacedPod({ name, namespace: NAMESPACE });
+      await getCoreV1Api().readNamespacedPod({ name, namespace: NAMESPACE });
       await new Promise((r) => setTimeout(r, 500));
     } catch {
       return;
@@ -81,7 +83,7 @@ async function waitForPodDeletion(
 export async function createPVC(userId: string): Promise<void> {
   const { pvc, slug } = resourceNames(userId);
   try {
-    await coreV1Api.readNamespacedPersistentVolumeClaim({
+    await getCoreV1Api().readNamespacedPersistentVolumeClaim({
       name: pvc,
       namespace: NAMESPACE,
     });
@@ -90,7 +92,7 @@ export async function createPVC(userId: string): Promise<void> {
     // does not exist, create it
   }
 
-  await coreV1Api.createNamespacedPersistentVolumeClaim({
+  await getCoreV1Api().createNamespacedPersistentVolumeClaim({
     namespace: NAMESPACE,
     body: {
       metadata: {
@@ -110,7 +112,7 @@ export async function createPVC(userId: string): Promise<void> {
 export async function createPod(userId: string): Promise<void> {
   const { pod, pvc, slug } = resourceNames(userId);
   try {
-    const existing = await coreV1Api.readNamespacedPod({
+    const existing = await getCoreV1Api().readNamespacedPod({
       name: pod,
       namespace: NAMESPACE,
     });
@@ -132,13 +134,16 @@ export async function createPod(userId: string): Promise<void> {
       return; // healthy enough to keep
     }
 
-    await coreV1Api.deleteNamespacedPod({ name: pod, namespace: NAMESPACE });
+    await getCoreV1Api().deleteNamespacedPod({
+      name: pod,
+      namespace: NAMESPACE,
+    });
     await waitForPodDeletion(pod);
   } catch {
     // does not exist, create it
   }
 
-  await coreV1Api.createNamespacedPod({
+  await getCoreV1Api().createNamespacedPod({
     namespace: NAMESPACE,
     body: {
       metadata: {
@@ -153,15 +158,12 @@ export async function createPod(userId: string): Promise<void> {
             image: CODE_SERVER_IMAGE,
             args: [
               "--bind-addr=0.0.0.0:80",
-              "--auth=password",
+              "--auth=none",
               "--disable-telemetry",
               "/home/coder/project",
             ],
             ports: [{ containerPort: 80 }],
-            env: [
-              { name: "HOME", value: "/home/coder" },
-              { name: "PASSWORD", value: deriveCodeServerPassword(slug) },
-            ],
+            env: [{ name: "HOME", value: "/home/coder" }],
             resources: {
               requests: { memory: "256Mi", cpu: "100m" },
               limits: { memory: "512Mi", cpu: "500m" },
@@ -195,13 +197,16 @@ export async function createPod(userId: string): Promise<void> {
 export async function createService(userId: string): Promise<void> {
   const { svc, slug } = resourceNames(userId);
   try {
-    await coreV1Api.readNamespacedService({ name: svc, namespace: NAMESPACE });
+    await getCoreV1Api().readNamespacedService({
+      name: svc,
+      namespace: NAMESPACE,
+    });
     return; // already exists
   } catch {
     // does not exist, create it
   }
 
-  await coreV1Api.createNamespacedService({
+  await getCoreV1Api().createNamespacedService({
     namespace: NAMESPACE,
     body: {
       metadata: {
@@ -221,7 +226,10 @@ export async function createService(userId: string): Promise<void> {
 export async function deletePod(userId: string): Promise<void> {
   const { pod } = resourceNames(userId);
   try {
-    await coreV1Api.deleteNamespacedPod({ name: pod, namespace: NAMESPACE });
+    await getCoreV1Api().deleteNamespacedPod({
+      name: pod,
+      namespace: NAMESPACE,
+    });
   } catch {
     // pod may not exist
   }
@@ -230,7 +238,7 @@ export async function deletePod(userId: string): Promise<void> {
 export async function deleteService(userId: string): Promise<void> {
   const { svc } = resourceNames(userId);
   try {
-    await coreV1Api.deleteNamespacedService({
+    await getCoreV1Api().deleteNamespacedService({
       name: svc,
       namespace: NAMESPACE,
     });
@@ -242,7 +250,7 @@ export async function deleteService(userId: string): Promise<void> {
 export async function getPodStatus(userId: string): Promise<string | null> {
   const { pod } = resourceNames(userId);
   try {
-    const response = await coreV1Api.readNamespacedPod({
+    const response = await getCoreV1Api().readNamespacedPod({
       name: pod,
       namespace: NAMESPACE,
     });
@@ -255,7 +263,7 @@ export async function getPodStatus(userId: string): Promise<string | null> {
 export async function isPodReady(userId: string): Promise<boolean> {
   const { pod } = resourceNames(userId);
   try {
-    const response = await coreV1Api.readNamespacedPod({
+    const response = await getCoreV1Api().readNamespacedPod({
       name: pod,
       namespace: NAMESPACE,
     });
@@ -276,4 +284,69 @@ export async function waitForPodReady(
     await new Promise((r) => setTimeout(r, 1000));
   }
   return false;
+}
+
+export async function createIngress(userId: string): Promise<void> {
+  const { ing, svc, slug } = resourceNames(userId);
+  const host = `${slug}.${CODE_SERVER_DOMAIN}`;
+
+  try {
+    await getNetworkingV1Api().readNamespacedIngress({
+      name: ing,
+      namespace: NAMESPACE,
+    });
+    return; // already exists
+  } catch {
+    // does not exist, create it
+  }
+
+  await getNetworkingV1Api().createNamespacedIngress({
+    namespace: NAMESPACE,
+    body: {
+      metadata: {
+        name: ing,
+        namespace: NAMESPACE,
+        labels: userResourceLabels(slug),
+        annotations: {
+          "nginx.ingress.kubernetes.io/proxy-http-version": "1.1",
+          "nginx.ingress.kubernetes.io/proxy-set-headers": "Upgrade",
+          "nginx.ingress.kubernetes.io/connection-upgrade": "upgrade",
+          "nginx.ingress.kubernetes.io/proxy-read-timeout": "3600",
+          "nginx.ingress.kubernetes.io/proxy-send-timeout": "3600",
+        },
+      },
+      spec: {
+        ingressClassName: "nginx",
+        tls: [{ hosts: [host], secretName: CODE_SERVER_TLS_SECRET }],
+        rules: [
+          {
+            host,
+            http: {
+              paths: [
+                {
+                  path: "/",
+                  pathType: "Prefix",
+                  backend: {
+                    service: { name: svc, port: { number: 80 } },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  });
+}
+
+export async function deleteIngress(userId: string): Promise<void> {
+  const { ing } = resourceNames(userId);
+  try {
+    await getNetworkingV1Api().deleteNamespacedIngress({
+      name: ing,
+      namespace: NAMESPACE,
+    });
+  } catch {
+    // ingress may not exist
+  }
 }

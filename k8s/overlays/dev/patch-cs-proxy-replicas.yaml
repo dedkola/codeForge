@@ -1,7 +1,0 @@
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: cs-proxy
-  namespace: codelearn
-spec:
-  replicas: 1

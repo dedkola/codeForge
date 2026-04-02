@@ -34,8 +34,8 @@ export default function CodeServerPanel({
       try {
         const res = await fetch("/api/code-server/status");
         const data = await res.json();
-        if (data.status === "ready" && data.proxyUrl) {
-          setCodeServerUrl(data.proxyUrl);
+        if (data.status === "ready" && data.url) {
+          setCodeServerUrl(data.url);
           setStatus("ready");
         } else if (data.status === "error") {
           setStatus("error");

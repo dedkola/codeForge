@@ -2,9 +2,8 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getUserCodeServerStatus } from "@/lib/code-server-manager";
-import { generateProxyToken } from "@/lib/code-server-token";
-import { resourceNames } from "@/lib/code-server-k8s";
-import { buildUserCodeServerProxyUrl } from "@/lib/code-server-url";
+import { userSlug } from "@/lib/code-server-k8s";
+import { buildCodeServerUrl } from "@/lib/code-server-config";
 
 export async function GET() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -14,12 +13,10 @@ export async function GET() {
 
   const status = await getUserCodeServerStatus(session.user.id);
 
-  let proxyUrl: string | undefined;
+  let url: string | undefined;
   if (status === "ready") {
-    const { svc } = resourceNames(session.user.id);
-    const token = await generateProxyToken(session.user.id, svc);
-    proxyUrl = buildUserCodeServerProxyUrl(session.user.id, token);
+    url = buildCodeServerUrl(userSlug(session.user.id));
   }
 
-  return NextResponse.json({ status, proxyUrl });
+  return NextResponse.json({ status, url });
 }

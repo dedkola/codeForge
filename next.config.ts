@@ -1,16 +1,14 @@
 import type { NextConfig } from "next";
 
-const isDockerBuild = process.env.DOCKER_BUILD === "true";
+const csDomain = process.env.CODE_SERVER_DOMAIN ?? "cs.tkweb.site";
 
 const nextConfig: NextConfig = {
-  output: isDockerBuild ? "standalone" : undefined,
   allowedDevOrigins: ["192.168.0.192"],
   async headers() {
     return [
       {
         source: "/(.*)",
         headers: [
-          // Allow code-server iframe to be embedded
           {
             key: "Content-Security-Policy",
             value: [
@@ -19,8 +17,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: blob:",
-              // Allow framing code-server proxy
-              "frame-src https://cs-proxy.tkweb.site",
+              `frame-src https://*.${csDomain}`,
               "connect-src 'self' ws: wss: http: https:",
             ].join("; "),
           },

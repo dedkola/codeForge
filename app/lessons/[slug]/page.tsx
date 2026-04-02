@@ -9,8 +9,6 @@ import CodeServerPanel from "@/components/CodeServerPanel";
 import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { ensureUserCodeServer } from "@/lib/code-server-manager";
-import { generateProxyToken } from "@/lib/code-server-token";
-import { buildUserCodeServerProxyUrl } from "@/lib/code-server-url";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -47,11 +45,7 @@ export default async function LessonPage({ params }: PageProps) {
   await connection(); // opt into dynamic rendering for k8s API calls
 
   const instance = await ensureUserCodeServer(session.user.id);
-  let codeServerUrl: string | undefined;
-  if (instance.status === "ready") {
-    const token = await generateProxyToken(session.user.id, instance.svcName);
-    codeServerUrl = buildUserCodeServerProxyUrl(session.user.id, token);
-  }
+  const codeServerUrl = instance.status === "ready" ? instance.url : undefined;
 
   return (
     <>

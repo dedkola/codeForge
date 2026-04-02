@@ -1,87 +1,105 @@
 # CodeForge
 
-CodeForge is a lesson-driven coding platform where authenticated users get an isolated browser code workspace.
+Interactive coding lesson platform — authenticated users get isolated browser-based VS Code workspaces.
 
-## Runtime Architecture
+## Architecture
 
-1. User logs in with Better Auth.
-2. App server ensures a per-user code-server workload exists (pod + service + PVC).
-3. App mints a short-lived signed token and returns a proxy URL.
-4. `cs-proxy` validates the token and reverse-proxies HTTP/WebSocket to the user service.
-5. Idle user pods are stopped by cleanup jobs while PVC data remains persistent.
+```
+Browser
+  ├── Next.js App (Vercel / local dev / self-hosted)
+  │     ├── /login, /signup        → Better Auth (PostgreSQL)
+  │     ├── /lessons               → Lesson catalog
+  │     ├── /lessons/[slug]        → Split-panel: lesson + code-server iframe
+  │     ├── /api/auth/[...all]     → Better Auth API
+  │     ├── /api/code-server/ensure  → Create pod + service + ingress
+  │     ├── /api/code-server/status  → Poll readiness
+  │     └── /api/code-server/cleanup → Delete idle resources
+  │
+  └── iframe → https://{slug}.cs.tkweb.site → code-server pod (--auth=none)
 
-## Target Repository Structure
+K3s Cluster
+  ├── Per-user: Pod + Service + Ingress (created dynamically by API)
+  ├── PVCs (persistent /home/coder/project storage)
+  ├── Cleanup CronJob (every 30 min)
+  ├── RBAC, NetworkPolicy, LimitRange
+  └── Wildcard TLS cert (*.cs.tkweb.site via cert-manager)
+```
 
-The repository is being refactored toward these boundaries:
+Key decisions:
 
-- `app/`: Next.js UI and API routes only.
-- `components/`: Presentation and client interaction components.
-- `lib/`: Domain logic and infrastructure adapters.
-  - `auth*.ts`: Authentication integration.
-  - `code-server-*.ts`: code-server orchestration, K8s resources, db state, token utilities.
-  - `k8s.ts`: Kubernetes client bootstrap.
-- `k8s/`: Platform manifests for the main app and runtime policy.
-- `cs-proxy/`: Dedicated reverse proxy service and manifests.
-- `data/`: Static lesson content.
+- **No proxy** — browser connects directly to code-server via per-user Ingress
+- **No container for frontend** — deploy via `next start`, Vercel, or any Node.js host
+- **`--auth=none`** — code-server has no password; security via URL obscurity + ephemeral pods
+- **Configurable domains** — all URLs driven by env vars for hosting flexibility
 
-## Code-Server Policy Configuration
+## Prerequisites
 
-Centralized in `lib/code-server-config.ts`:
+1. **K3s cluster** with nginx-ingress-controller and cert-manager
+2. **Wildcard DNS**: `*.cs.tkweb.site` → K3s ingress controller IP
+3. **Wildcard TLS cert**: cert-manager Certificate for `*.cs.tkweb.site` → Secret `cs-wildcard-tls`
+4. **PostgreSQL** accessible from wherever Next.js is hosted
 
-- `CODE_SERVER_IMAGE` (default `ghcr.io/coder/code-server:4.105.2`)
-- `CODE_SERVER_STORAGE_CLASS` (default `local-path`)
-- `CODE_SERVER_PVC_SIZE` (default `1Gi`)
-- `CODE_SERVER_MAX_IDLE_MINUTES` (default `120`)
-- `CODE_SERVER_POD_READY_TIMEOUT_MS` (default `15000`)
-- `CS_PROXY_URL` base URL for user iframe links
-
-These values replace hardcoded runtime values in API routes and orchestration code.
-
-## Kubernetes Safety Baseline
-
-The platform includes:
-
-- `networkpolicy-code-server-user.yaml`: only allows ingress to user code-server pods from `cs-proxy` pods.
-- `limitrange-code-server-user.yaml`: enforces container default/min/max resource guardrails.
-
-Kustomize layout:
-
-- `k8s/base`: shared stack resources
-- `k8s/base/cs-proxy`: canonical cs-proxy Kubernetes manifests for overlays
-- `k8s/overlays/prod`: production stack
-- `k8s/overlays/dev`: development stack
-- `k8s/`: umbrella entrypoint (currently maps to prod overlay)
-
-## Local Development
+## Quick Start
 
 ```bash
+# Install dependencies
 pnpm install
+
+# Copy and fill in environment variables
+cp .env.example .env.local
+
+# Run locally
 pnpm dev
 ```
 
-Open `http://localhost:3000`.
+## Environment Variables
 
-## Build and Checks
+See [`.env.example`](.env.example) for all available variables. Key groups:
+
+- **Auth**: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `DATABASE_URL`
+- **K8s access**: `K8S_API_SERVER`, `K8S_AUTH_TOKEN` (or leave empty for local kubeconfig)
+- **Code-server**: `CODE_SERVER_DOMAIN`, `CODE_SERVER_TLS_SECRET`, `CODE_SERVER_CLEANUP_SECRET`
+
+## K8s Setup
+
+Apply cluster resources (namespace, RBAC, policies):
+
+```bash
+kubectl apply -k k8s/
+```
+
+For dev overlay:
+
+```bash
+kubectl apply -k k8s/overlays/dev/
+```
+
+## Code-Server Configuration
+
+Centralized in `lib/code-server-config.ts`:
+
+| Variable                       | Default                             | Description                             |
+| ------------------------------ | ----------------------------------- | --------------------------------------- |
+| `CODE_SERVER_DOMAIN`           | `cs.tkweb.site`                     | Wildcard domain for per-user subdomains |
+| `CODE_SERVER_IMAGE`            | `ghcr.io/coder/code-server:4.105.2` | Container image                         |
+| `CODE_SERVER_STORAGE_CLASS`    | `local-path`                        | PVC storage class                       |
+| `CODE_SERVER_PVC_SIZE`         | `1Gi`                               | Workspace storage size                  |
+| `CODE_SERVER_MAX_IDLE_MINUTES` | `120`                               | Idle timeout before cleanup             |
+| `CODE_SERVER_TLS_SECRET`       | `cs-wildcard-tls`                   | K8s TLS secret name                     |
+
+## Build
 
 ```bash
 pnpm lint
 pnpm build
 ```
 
-## Deployment Model
+## Project Structure
 
-- GitHub Actions: build and push images.
-- Flux: image policy and cluster reconciliation.
-- K3s: runtime execution.
-- Cloudflared: domain tunnel to ingress.
-
-Deploy everything together:
-
-```bash
-kubectl apply -f k8s/secrets.yaml
-kubectl apply -k k8s
 ```
-
-For operational details and migration notes, see `UPDATE.md` and `docs/REFRACTOR-DEPLOYMENT-GUIDE.md`.
-
-Note: The configuration-snippet annotation requires allow-snippet-annotations: true in the ingress-nginx controller's ConfigMap (this is the default in older versions but disabled by default in v1.9.0+). If your ingress-nginx has it disabled, the snippet is silently ignored — check with kubectl get cm ingress-nginx-controller -n ingress-nginx -o yaml | grep allow-snippet and enable it if needed.
+app/            Next.js pages and API routes
+components/     React client components
+lib/            Domain logic — auth, K8s client, code-server orchestration
+data/           Static lesson content
+k8s/            Kubernetes manifests (namespace, RBAC, policies, CronJob)
+```
