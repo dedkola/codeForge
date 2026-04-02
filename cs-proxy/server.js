@@ -10,6 +10,11 @@ const NAMESPACE = process.env.NAMESPACE || "codelearn";
 const RAW_SECRET = process.env.CS_PROXY_SECRET;
 const secret = new TextEncoder().encode(RAW_SECRET);
 
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000; // 8 hours (matches JWT expiry)
+const CS_COOKIE_TTL_MS = 10 * 60 * 1000; // 10 min TTL for code-server session cookies
+const LOGIN_RETRY_COUNT = 3;
+const LOGIN_RETRY_DELAY_MS = 1000;
+
 /* ── Per-user password derivation (mirrors lib/code-server-password.ts) ── */
 
 function derivePassword(slug) {
@@ -18,9 +23,51 @@ function derivePassword(slug) {
     .digest("hex");
 }
 
+/* ── In-memory session store (fallback when third-party cookies are blocked) ── */
+
+/**
+ * slug → { svc, userId, rawToken, expiresAt }
+ * Used when the browser blocks the cs_session cookie (cross-origin iframe).
+ */
+const activeSessions = new Map();
+
+function upsertActiveSession(slug, payload) {
+  activeSessions.set(slug, {
+    svc: payload.svc,
+    userId: payload.userId,
+    rawToken: payload.rawToken,
+    expiresAt: Date.now() + SESSION_TTL_MS,
+  });
+}
+
+function getActiveSession(slug) {
+  const entry = activeSessions.get(slug);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    activeSessions.delete(slug);
+    return null;
+  }
+  return entry;
+}
+
+// Periodically clean expired sessions (every 5 min)
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const [slug, entry] of activeSessions) {
+      if (now > entry.expiresAt) activeSessions.delete(slug);
+    }
+  },
+  5 * 60 * 1000,
+).unref();
+
 /* ── Transparent login to code-server (password auth) ── */
 
-/** slug → code-server auth cookie pair (e.g. "code-server-session=..." or legacy "key=...") */
+/**
+ * slug → { cookie, expiresAt }
+ * code-server auth cookie pair (e.g. "code-server-session=..." or legacy "key=...")
+ * TTL prevents forwarding stale cookies after pod restarts.
+ */
 const csSessionCache = new Map();
 
 function extractCodeServerAuthCookie(setCookies) {
@@ -41,11 +88,15 @@ function extractCodeServerAuthCookie(setCookies) {
   return null;
 }
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 /**
  * POST /login on the code-server pod to obtain its session cookie.
  * Returns a cookie pair (name=value) or null on failure.
  */
-function loginToCodeServer(svc, slug) {
+function loginToCodeServerOnce(svc, slug) {
   return new Promise((resolve) => {
     const password = derivePassword(slug);
     const body = `password=${encodeURIComponent(password)}`;
@@ -61,6 +112,7 @@ function loginToCodeServer(svc, slug) {
           "Content-Type": "application/x-www-form-urlencoded",
           "Content-Length": Buffer.byteLength(body),
         },
+        timeout: 5000,
       },
       (res) => {
         // Drain the response body
@@ -71,9 +123,25 @@ function loginToCodeServer(svc, slug) {
       },
     );
 
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(null);
+    });
     req.on("error", () => resolve(null));
     req.end(body);
   });
+}
+
+/**
+ * Login with retries to handle slow pod starts.
+ */
+async function loginToCodeServer(svc, slug) {
+  for (let attempt = 0; attempt < LOGIN_RETRY_COUNT; attempt++) {
+    const cookie = await loginToCodeServerOnce(svc, slug);
+    if (cookie) return cookie;
+    if (attempt < LOGIN_RETRY_COUNT - 1) await sleep(LOGIN_RETRY_DELAY_MS);
+  }
+  return null;
 }
 
 /**
@@ -81,11 +149,18 @@ function loginToCodeServer(svc, slug) {
  * Returns a cookie pair (name=value) or null.
  */
 async function ensureCsSession(svc, slug) {
-  let cookie = csSessionCache.get(slug);
-  if (cookie) return cookie;
+  const cached = csSessionCache.get(slug);
+  if (cached && Date.now() < cached.expiresAt) return cached.cookie;
 
-  cookie = await loginToCodeServer(svc, slug);
-  if (cookie) csSessionCache.set(slug, cookie);
+  // Expired or missing — re-login
+  csSessionCache.delete(slug);
+  const cookie = await loginToCodeServer(svc, slug);
+  if (cookie) {
+    csSessionCache.set(slug, {
+      cookie,
+      expiresAt: Date.now() + CS_COOKIE_TTL_MS,
+    });
+  }
   return cookie;
 }
 
@@ -116,9 +191,10 @@ proxy.on("error", (err, req, res) => {
 });
 
 // Detect stale code-server session: if code-server redirects to /login,
-// the cached cookie is invalid (pod was restarted). Clear it so next
-// request triggers a fresh transparent login.
-proxy.on("proxyRes", (proxyRes, req) => {
+// the cached cookie is invalid (pod was restarted). Clear it and retry
+// transparent login, then redirect the browser back to the original URL
+// instead of letting the 302→/login through (which breaks the /u/<slug> prefix).
+proxy.on("proxyRes", async (proxyRes, req, res) => {
   if (
     proxyRes.statusCode === 302 &&
     (proxyRes.headers.location || "").includes("/login")
@@ -126,6 +202,26 @@ proxy.on("proxyRes", (proxyRes, req) => {
     const route = parseRoute(req.originalUrl || req.url || "/");
     if (route) {
       csSessionCache.delete(route.slug);
+    }
+
+    // Suppress the redirect — tell the browser to retry the same URL.
+    // This avoids navigating the iframe to /login (which lacks /u/<slug> prefix).
+    if (typeof res.writeHead === "function" && !res.headersSent) {
+      // Consume the upstream body so the socket is freed
+      proxyRes.resume();
+
+      res.writeHead(503, {
+        "Content-Type": "text/html",
+        "Retry-After": "2",
+      });
+      res.end(
+        `<!DOCTYPE html><html><head><meta charset="utf-8">` +
+          `<meta http-equiv="refresh" content="2"></head>` +
+          `<body style="background:#1e1e2e;color:#cdd6f4;font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0">` +
+          `<div style="text-align:center"><p>Reconnecting to workspace…</p>` +
+          `<p style="font-size:13px;opacity:.6">Session expired, logging back in automatically.</p></div>` +
+          `</body></html>`,
+      );
     }
   }
 });
@@ -179,25 +275,52 @@ async function verifyToken(rawToken) {
   }
 }
 
+/**
+ * Resolve the user session from (in order):
+ * 1. ?token= query parameter (initial iframe load)
+ * 2. cs_session cookie (works when third-party cookies are allowed)
+ * 3. In-memory activeSessions map (fallback when cookies are blocked)
+ */
 async function resolveSession(req, route) {
   const rawQueryToken =
     typeof route.query.token === "string" ? route.query.token : null;
   const rawCookieToken = tokenFromCookie(req);
+
+  // Try query token first, then cookie token
   const rawToken = rawQueryToken || rawCookieToken;
-  if (!rawToken) return { status: "unauthorized" };
-
-  const payload = await verifyToken(rawToken);
-  if (!payload) return { status: "unauthorized" };
-
-  if (payload.svc !== expectedServiceForSlug(route.slug)) {
-    return { status: "forbidden" };
+  if (rawToken) {
+    const payload = await verifyToken(rawToken);
+    if (payload) {
+      if (payload.svc !== expectedServiceForSlug(route.slug)) {
+        return { status: "forbidden" };
+      }
+      // Persist in memory so subsequent requests without cookies still work
+      upsertActiveSession(route.slug, payload);
+      return {
+        status: "ok",
+        payload,
+        fromQuery: Boolean(rawQueryToken),
+      };
+    }
   }
 
-  return {
-    status: "ok",
-    payload,
-    fromQuery: Boolean(rawQueryToken),
-  };
+  // Fallback: check in-memory session store (for when cookies are blocked)
+  const memSession = getActiveSession(route.slug);
+  if (memSession) {
+    // Re-verify the stored token is still valid
+    const payload = await verifyToken(memSession.rawToken);
+    if (payload && payload.svc === expectedServiceForSlug(route.slug)) {
+      return {
+        status: "ok",
+        payload,
+        fromQuery: false,
+      };
+    }
+    // Token expired or invalid — remove stale entry
+    activeSessions.delete(route.slug);
+  }
+
+  return { status: "unauthorized" };
 }
 
 function sendHttpAuthError(res, status) {

@@ -83,3 +83,5 @@ kubectl apply -k k8s
 ```
 
 For operational details and migration notes, see `UPDATE.md` and `docs/REFRACTOR-DEPLOYMENT-GUIDE.md`.
+
+Note: The configuration-snippet annotation requires allow-snippet-annotations: true in the ingress-nginx controller's ConfigMap (this is the default in older versions but disabled by default in v1.9.0+). If your ingress-nginx has it disabled, the snippet is silently ignored — check with kubectl get cm ingress-nginx-controller -n ingress-nginx -o yaml | grep allow-snippet and enable it if needed.
