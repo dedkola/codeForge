@@ -157,11 +157,13 @@ export async function createPod(userId: string): Promise<void> {
               "--bind-addr=0.0.0.0:80",
               "--auth=none",
               "--disable-telemetry",
-              "--disable-frame-ancestors",
               "/home/coder/project",
             ],
             ports: [{ containerPort: 80 }],
-            env: [{ name: "HOME", value: "/home/coder" }],
+            env: [
+              { name: "HOME", value: "/home/coder" },
+              { name: "CS_DISABLE_IFRAME_PROTECTION", value: "true" },
+            ],
             resources: {
               requests: { memory: "256Mi", cpu: "100m" },
               limits: { memory: "512Mi", cpu: "500m" },
