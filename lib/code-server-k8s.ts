@@ -1,7 +1,9 @@
 import { createHash } from "crypto";
-import { getCoreV1Api, NAMESPACE } from "./k8s";
+import { getCoreV1Api, getNetworkingV1Api, NAMESPACE } from "./k8s";
 import {
+  CODE_SERVER_DOMAIN,
   CODE_SERVER_IMAGE,
+  CODE_SERVER_PORT,
   CODE_SERVER_PVC_SIZE,
   CODE_SERVER_STORAGE_CLASS,
 } from "./code-server-config";
@@ -17,6 +19,7 @@ export function resourceNames(userId: string) {
     pod: `cs-${slug}`,
     svc: `cs-svc-${slug}`,
     pvc: `cs-pvc-${slug}`,
+    ingress: `cs-ing-${slug}`,
     slug,
   };
 }
@@ -154,12 +157,12 @@ export async function createPod(userId: string): Promise<void> {
             name: "code-server",
             image: CODE_SERVER_IMAGE,
             args: [
-              "--bind-addr=0.0.0.0:80",
+              `--bind-addr=0.0.0.0:${CODE_SERVER_PORT}`,
               "--auth=none",
               "--disable-telemetry",
               "/home/coder/project",
             ],
-            ports: [{ containerPort: 80 }],
+            ports: [{ containerPort: CODE_SERVER_PORT }],
             env: [
               { name: "HOME", value: "/home/coder" },
               { name: "CS_DISABLE_IFRAME_PROTECTION", value: "true" },
@@ -172,12 +175,12 @@ export async function createPod(userId: string): Promise<void> {
               { name: "workspace", mountPath: "/home/coder/project" },
             ],
             readinessProbe: {
-              httpGet: { path: "/healthz", port: 80 },
+              httpGet: { path: "/healthz", port: CODE_SERVER_PORT },
               initialDelaySeconds: 5,
               periodSeconds: 3,
             },
             livenessProbe: {
-              httpGet: { path: "/healthz", port: 80 },
+              httpGet: { path: "/healthz", port: CODE_SERVER_PORT },
               initialDelaySeconds: 15,
               periodSeconds: 10,
             },
@@ -217,7 +220,14 @@ export async function createService(userId: string): Promise<void> {
       spec: {
         type: "ClusterIP",
         selector: { app: "code-server-user", userId: slug },
-        ports: [{ port: 80, targetPort: 80, protocol: "TCP", name: "http" }],
+        ports: [
+          {
+            port: CODE_SERVER_PORT,
+            targetPort: CODE_SERVER_PORT,
+            protocol: "TCP",
+            name: "http",
+          },
+        ],
       },
     },
   });
@@ -284,4 +294,69 @@ export async function waitForPodReady(
     await new Promise((r) => setTimeout(r, 1000));
   }
   return false;
+}
+
+export async function createIngress(userId: string): Promise<void> {
+  const { ingress, svc, slug } = resourceNames(userId);
+  const host = `cs-${slug}.${CODE_SERVER_DOMAIN}`;
+
+  try {
+    await getNetworkingV1Api().readNamespacedIngress({
+      name: ingress,
+      namespace: NAMESPACE,
+    });
+    return; // already exists
+  } catch {
+    // does not exist, create it
+  }
+
+  await getNetworkingV1Api().createNamespacedIngress({
+    namespace: NAMESPACE,
+    body: {
+      metadata: {
+        name: ingress,
+        namespace: NAMESPACE,
+        labels: userResourceLabels(slug),
+        annotations: {
+          "nginx.ingress.kubernetes.io/proxy-http-version": "1.1",
+          "nginx.ingress.kubernetes.io/proxy-read-timeout": "3600",
+          "nginx.ingress.kubernetes.io/proxy-send-timeout": "3600",
+        },
+      },
+      spec: {
+        ingressClassName: "nginx",
+        rules: [
+          {
+            host,
+            http: {
+              paths: [
+                {
+                  path: "/",
+                  pathType: "Prefix",
+                  backend: {
+                    service: {
+                      name: svc,
+                      port: { number: CODE_SERVER_PORT },
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  });
+}
+
+export async function deleteIngress(userId: string): Promise<void> {
+  const { ingress } = resourceNames(userId);
+  try {
+    await getNetworkingV1Api().deleteNamespacedIngress({
+      name: ingress,
+      namespace: NAMESPACE,
+    });
+  } catch {
+    // ingress may not exist
+  }
 }

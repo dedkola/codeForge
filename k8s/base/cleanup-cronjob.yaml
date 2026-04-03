@@ -20,12 +20,19 @@ spec:
                 - -X
                 - POST
                 - -H
-                - "Authorization: Bearer $(CODE_SERVER_CLEANUP_SECRET)"
-                - "http://codeforge-service.codelearn.svc.cluster.local:3000/api/code-server/cleanup"
+                - "Authorization: Bearer $(CLEANUP_SECRET)"
+                - "https://codeforge.tkweb.site/api/code-server/cleanup"
               env:
-                - name: CODE_SERVER_CLEANUP_SECRET
+                - name: CLEANUP_SECRET
                   valueFrom:
                     secretKeyRef:
                       name: codeforge-secrets
-                      key: CODE_SERVER_CLEANUP_SECRET
+                      key: CS_PROXY_SECRET
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 100m
+                  memory: 128Mi
           restartPolicy: OnFailure

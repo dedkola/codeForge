@@ -1,5 +1,5 @@
 import { NAMESPACE } from "./k8s";
-import { CODE_SERVER_DOMAIN } from "./code-server-config";
+import { CODE_SERVER_DOMAIN, CODE_SERVER_PORT } from "./code-server-config";
 
 const CF_API_BASE = "https://api.cloudflare.com/client/v4";
 
@@ -41,12 +41,12 @@ function configUrl(): string {
 
 /** Build the hostname for a code-server instance. */
 export function tunnelHostname(slug: string): string {
-  return `cs-${slug}.${CODE_SERVER_DOMAIN}`;
+  return `${slug}.${CODE_SERVER_DOMAIN}`;
 }
 
 /** Build the in-cluster service URL that cloudflared routes to. */
 function serviceUrl(slug: string): string {
-  return `http://cs-svc-${slug}.${NAMESPACE}.svc.cluster.local:80`;
+  return `http://cs-svc-${slug}.${NAMESPACE}.svc.cluster.local:${CODE_SERVER_PORT}`;
 }
 
 /** Fetch the current tunnel configuration from Cloudflare API. */

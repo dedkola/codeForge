@@ -23,6 +23,8 @@ export const CODE_SERVER_POD_READY_TIMEOUT_MS = parsePositiveInt(
   15000,
 );
 
+export const CODE_SERVER_PORT = 8080;
+
 export const CODE_SERVER_DOMAIN =
   process.env.CODE_SERVER_DOMAIN ?? "tkweb.site";
 
