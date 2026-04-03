@@ -1,11 +1,9 @@
 import { createHash } from "crypto";
-import { getCoreV1Api, getNetworkingV1Api, NAMESPACE } from "./k8s";
+import { getCoreV1Api, NAMESPACE } from "./k8s";
 import {
   CODE_SERVER_IMAGE,
   CODE_SERVER_PVC_SIZE,
   CODE_SERVER_STORAGE_CLASS,
-  CODE_SERVER_DOMAIN,
-  CODE_SERVER_TLS_SECRET,
 } from "./code-server-config";
 
 /** Produce a K8s-safe slug from a user ID (lowercase hex, 12 chars). */
@@ -19,7 +17,6 @@ export function resourceNames(userId: string) {
     pod: `cs-${slug}`,
     svc: `cs-svc-${slug}`,
     pvc: `cs-pvc-${slug}`,
-    ing: `cs-ing-${slug}`,
     slug,
   };
 }
@@ -284,69 +281,4 @@ export async function waitForPodReady(
     await new Promise((r) => setTimeout(r, 1000));
   }
   return false;
-}
-
-export async function createIngress(userId: string): Promise<void> {
-  const { ing, svc, slug } = resourceNames(userId);
-  const host = `${slug}.${CODE_SERVER_DOMAIN}`;
-
-  try {
-    await getNetworkingV1Api().readNamespacedIngress({
-      name: ing,
-      namespace: NAMESPACE,
-    });
-    return; // already exists
-  } catch {
-    // does not exist, create it
-  }
-
-  await getNetworkingV1Api().createNamespacedIngress({
-    namespace: NAMESPACE,
-    body: {
-      metadata: {
-        name: ing,
-        namespace: NAMESPACE,
-        labels: userResourceLabels(slug),
-        annotations: {
-          "nginx.ingress.kubernetes.io/proxy-http-version": "1.1",
-          "nginx.ingress.kubernetes.io/proxy-set-headers": "Upgrade",
-          "nginx.ingress.kubernetes.io/connection-upgrade": "upgrade",
-          "nginx.ingress.kubernetes.io/proxy-read-timeout": "3600",
-          "nginx.ingress.kubernetes.io/proxy-send-timeout": "3600",
-        },
-      },
-      spec: {
-        ingressClassName: "nginx",
-        tls: [{ hosts: [host], secretName: CODE_SERVER_TLS_SECRET }],
-        rules: [
-          {
-            host,
-            http: {
-              paths: [
-                {
-                  path: "/",
-                  pathType: "Prefix",
-                  backend: {
-                    service: { name: svc, port: { number: 80 } },
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      },
-    },
-  });
-}
-
-export async function deleteIngress(userId: string): Promise<void> {
-  const { ing } = resourceNames(userId);
-  try {
-    await getNetworkingV1Api().deleteNamespacedIngress({
-      name: ing,
-      namespace: NAMESPACE,
-    });
-  } catch {
-    // ingress may not exist
-  }
 }

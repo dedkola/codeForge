@@ -1,7 +1,6 @@
 import * as k8s from "@kubernetes/client-node";
 
 let _coreV1Api: k8s.CoreV1Api | null = null;
-let _networkingV1Api: k8s.NetworkingV1Api | null = null;
 
 function getKubeConfig(): k8s.KubeConfig {
   const kc = new k8s.KubeConfig();
@@ -33,13 +32,6 @@ export function getCoreV1Api(): k8s.CoreV1Api {
     _coreV1Api = getKubeConfig().makeApiClient(k8s.CoreV1Api);
   }
   return _coreV1Api;
-}
-
-export function getNetworkingV1Api(): k8s.NetworkingV1Api {
-  if (!_networkingV1Api) {
-    _networkingV1Api = getKubeConfig().makeApiClient(k8s.NetworkingV1Api);
-  }
-  return _networkingV1Api;
 }
 
 export const NAMESPACE = process.env.K8S_NAMESPACE ?? "codelearn";

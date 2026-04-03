@@ -7,3 +7,4 @@ resources:
   - cleanup-cronjob.yaml
   - networkpolicy-code-server-user.yaml
   - limitrange-code-server-user.yaml
+  - cloudflared-deployment.yaml

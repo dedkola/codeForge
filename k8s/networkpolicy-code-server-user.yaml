@@ -11,9 +11,12 @@ spec:
     - Ingress
   ingress:
     - from:
-        - podSelector:
+        - namespaceSelector:
             matchLabels:
-              app: cs-proxy
+              kubernetes.io/metadata.name: cloudflare
+          podSelector:
+            matchLabels:
+              app: cloudflared
       ports:
         - protocol: TCP
           port: 80

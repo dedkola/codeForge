@@ -13,10 +13,10 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              app.kubernetes.io/name: ingress-nginx
+              kubernetes.io/metadata.name: cloudflare
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: ingress-nginx
+              app: cloudflared
       ports:
         - protocol: TCP
           port: 80

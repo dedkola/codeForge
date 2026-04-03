@@ -3,13 +3,12 @@ import {
   createPVC,
   createPod,
   createService,
-  createIngress,
   deletePod,
   deleteService,
-  deleteIngress,
   getPodStatus,
   waitForPodReady,
 } from "./code-server-k8s";
+import { addTunnelRoute, removeTunnelRoute } from "./cloudflare-tunnel";
 import {
   getInstanceByUserId,
   upsertInstance,
@@ -49,7 +48,7 @@ export async function ensureUserCodeServer(
     await createPVC(userId);
     await createPod(userId);
     await createService(userId);
-    await createIngress(userId);
+    await addTunnelRoute(slug);
   } catch (err) {
     console.error(
       `Failed to create code-server resources for user ${userId}:`,
@@ -73,9 +72,10 @@ export async function ensureUserCodeServer(
 }
 
 export async function stopUserCodeServer(userId: string): Promise<void> {
+  const { slug } = resourceNames(userId);
   await deletePod(userId);
   await deleteService(userId);
-  await deleteIngress(userId);
+  await removeTunnelRoute(slug);
   await updateStatus(userId, "stopped");
 }
 
@@ -87,9 +87,10 @@ export async function cleanupStaleInstances(
 
   for (const instance of stale) {
     try {
+      const { slug } = resourceNames(instance.id);
       await deletePod(instance.id);
       await deleteService(instance.id);
-      await deleteIngress(instance.id);
+      await removeTunnelRoute(slug);
       await updateStatus(instance.id, "stopped");
     } catch (err) {
       console.error(`Failed to cleanup instance for user ${instance.id}:`, err);
