@@ -4,7 +4,7 @@ Expose your K3s API server through a Cloudflare Tunnel so that CodeForge (hosted
 
 ## Overview
 
-```
+```text
 CodeForge (Vercel / VPS)            Cloudflare Edge            K3s Node
   │                                     │                        │
   │  K8S_API_SERVER=                    │                        │
@@ -50,7 +50,7 @@ cloudflared tunnel create k3s-api
 
 This generates a tunnel ID and a credentials file at:
 
-```
+```text
 ~/.cloudflared/<TUNNEL_ID>.json
 ```
 
@@ -212,8 +212,8 @@ kc.loadFromOptions({
 
 1. Start CodeForge locally: `pnpm dev`
 2. Log in and open a lesson
-3. Click "Start" — the API creates a pod and service in K3s through the tunnel, then adds a Cloudflare tunnel route via API
-4. The iframe loads `https://cs-<slug>.tkweb.site` (routed through the same Cloudflare Tunnel to the in-cluster cloudflared pod)
+3. Click "Start" — the API creates pod/service/ingress in K3s through the API tunnel
+4. The iframe loads `https://<slug>.cs.tkweb.site` through nginx ingress with your cert-manager wildcard TLS certificate
 
 ---
 
@@ -226,28 +226,32 @@ kc.loadFromOptions({
 | Tunnel compromise           | cloudflared uses outbound-only connections — no open inbound ports on K3s node.                                   |
 | RBAC scope                  | `codeforge-sa` is scoped to `codelearn` namespace only. Cannot access other namespaces or cluster-wide resources. |
 | Brute force                 | Cloudflare rate-limiting + WAF can be enabled on `k8s.tkweb.site` for extra protection.                           |
-| Code-server no auth         | Pods run `--auth=none`. NetworkPolicy restricts traffic to cloudflared pod only. No direct access from internet.  |
+| Code-server ingress         | Pods run `--auth=none`; restrict ingress to controller namespaces only and enforce TLS redirect on nginx ingress. |
 
 ---
 
 ## Troubleshooting
 
-| Problem                              | Fix                                                                                                                               |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `connection refused` from CodeForge  | Tunnel not running. Check `kubectl get pods -n codelearn -l app=cloudflared`.                                                     |
-| `401 Unauthorized`                   | Token expired or invalid. Regenerate with `kubectl create token`.                                                                 |
-| `403 Forbidden`                      | RBAC issue. Verify the Role has the right verbs/resources and the RoleBinding matches.                                            |
-| DNS not resolving                    | Run `cloudflared tunnel route dns k3s-api k8s.tkweb.site` again. Check Cloudflare DNS dashboard.                                  |
-| Tunnel shows "inactive"              | Check cloudflared pod logs: `kubectl logs -n codelearn -l app=cloudflared`.                                                       |
-| Pods created but iframe doesn't load | Check tunnel route was added: verify in Cloudflare dashboard or GET tunnel config. Check cloudflared pod can resolve service DNS. |
+| Problem                              | Fix                                                                                                                 |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `connection refused` from CodeForge  | Tunnel not running. Check `kubectl get pods -n codelearn -l app=cloudflared`.                                       |
+| `401 Unauthorized`                   | Token expired or invalid. Regenerate with `kubectl create token`.                                                   |
+| `403 Forbidden`                      | RBAC issue. Verify the Role has the right verbs/resources and the RoleBinding matches.                              |
+| DNS not resolving                    | Run `cloudflared tunnel route dns k3s-api k8s.tkweb.site` again. Check Cloudflare DNS dashboard.                    |
+| Tunnel shows "inactive"              | Check cloudflared pod logs: `kubectl logs -n codelearn -l app=cloudflared`.                                         |
+| Pods created but iframe doesn't load | Check wildcard DNS (`*.cs.tkweb.site`) points to ingress, certificate is Ready, and ingress uses `wildcard-cs-tls`. |
 
 ---
 
 ## Architecture summary
 
-Both management and user traffic flow through Cloudflare Tunnel:
+Cloudflare Tunnel is used only for Kubernetes API connectivity; user workspaces are served by nginx ingress:
 
 1. **K8s API** (`k8s.tkweb.site`): CodeForge → Cloudflare Tunnel → K3s API server (port 6443)
-2. **Code-server** (`cs-<slug>.tkweb.site`): Browser iframe → Cloudflare Tunnel → cloudflared pod (in-cluster) → code-server service
+2. **Code-server** (`<slug>.cs.tkweb.site`): Browser iframe → nginx ingress → per-user code-server service
 
-No wildcard DNS, no nginx-ingress, no TLS cert management. Cloudflare handles TLS termination and routing. Routes are added/removed dynamically via the Cloudflare Tunnel Configuration API when pods are created/destroyed.
+TLS for user workspaces is managed by cert-manager (`ClusterIssuer` + wildcard `Certificate`) and terminated by nginx ingress using `wildcard-cs-tls`.
+
+For full deployment and verification steps in the `codelearn` namespace, continue with:
+
+- [K3s codelearn next steps (nginx + wildcard SSL)](./K3S-CODELEARN-NGINX-SSL-NEXT-STEPS.md)

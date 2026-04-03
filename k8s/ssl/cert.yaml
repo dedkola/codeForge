@@ -1,0 +1,20 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-cs
+  namespace: codelearn
+spec:
+  secretName: wildcard-cs-tls
+  duration: 2160h
+  renewBefore: 720h
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    rotationPolicy: Always
+  issuerRef:
+    name: cloudflare-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+  dnsNames:
+    - "cs.tkweb.site"
+    - "*.cs.tkweb.site"

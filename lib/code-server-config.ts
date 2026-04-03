@@ -26,11 +26,18 @@ export const CODE_SERVER_POD_READY_TIMEOUT_MS = parsePositiveInt(
 export const CODE_SERVER_PORT = 8080;
 
 export const CODE_SERVER_DOMAIN =
-  process.env.CODE_SERVER_DOMAIN ?? "tkweb.site";
+  process.env.CODE_SERVER_DOMAIN ?? "cs.tkweb.site";
+
+export const CODE_SERVER_TLS_SECRET =
+  process.env.CODE_SERVER_TLS_SECRET ?? "wildcard-cs-tls";
+
+export function buildCodeServerHost(slug: string): string {
+  return `${slug}.${CODE_SERVER_DOMAIN}`;
+}
 
 export const CODE_SERVER_CLEANUP_SECRET =
   process.env.CODE_SERVER_CLEANUP_SECRET ?? "";
 
 export function buildCodeServerUrl(slug: string): string {
-  return `https://cs-${slug}.${CODE_SERVER_DOMAIN}`;
+  return `https://${buildCodeServerHost(slug)}`;
 }

@@ -1,11 +1,12 @@
 import { createHash } from "crypto";
 import { getCoreV1Api, getNetworkingV1Api, NAMESPACE } from "./k8s";
 import {
-  CODE_SERVER_DOMAIN,
+  buildCodeServerHost,
   CODE_SERVER_IMAGE,
   CODE_SERVER_PORT,
   CODE_SERVER_PVC_SIZE,
   CODE_SERVER_STORAGE_CLASS,
+  CODE_SERVER_TLS_SECRET,
 } from "./code-server-config";
 
 /** Produce a K8s-safe slug from a user ID (lowercase hex, 12 chars). */
@@ -298,7 +299,7 @@ export async function waitForPodReady(
 
 export async function createIngress(userId: string): Promise<void> {
   const { ingress, svc, slug } = resourceNames(userId);
-  const host = `cs-${slug}.${CODE_SERVER_DOMAIN}`;
+  const host = buildCodeServerHost(slug);
 
   try {
     await getNetworkingV1Api().readNamespacedIngress({
@@ -318,6 +319,7 @@ export async function createIngress(userId: string): Promise<void> {
         namespace: NAMESPACE,
         labels: userResourceLabels(slug),
         annotations: {
+          "nginx.ingress.kubernetes.io/ssl-redirect": "true",
           "nginx.ingress.kubernetes.io/proxy-http-version": "1.1",
           "nginx.ingress.kubernetes.io/proxy-read-timeout": "3600",
           "nginx.ingress.kubernetes.io/proxy-send-timeout": "3600",
@@ -325,6 +327,12 @@ export async function createIngress(userId: string): Promise<void> {
       },
       spec: {
         ingressClassName: "nginx",
+        tls: [
+          {
+            hosts: [host],
+            secretName: CODE_SERVER_TLS_SECRET,
+          },
+        ],
         rules: [
           {
             host,

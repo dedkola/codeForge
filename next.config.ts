@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const csDomain = process.env.CODE_SERVER_DOMAIN ?? "tkweb.site";
+const csDomain = process.env.CODE_SERVER_DOMAIN ?? "cs.tkweb.site";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["192.168.0.192"],
@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: blob:",
-              `frame-src https://cs-*.${csDomain}`,
+              `frame-src https://*.${csDomain}`,
               "connect-src 'self' ws: wss: http: https:",
             ].join("; "),
           },

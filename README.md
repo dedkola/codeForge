@@ -4,7 +4,7 @@ Interactive coding lesson platform — authenticated users get isolated browser-
 
 ## Architecture
 
-```
+```text
 Browser
   ├── Next.js App (Vercel / local dev / self-hosted)
   │     ├── /login, /signup        → Better Auth (PostgreSQL)
@@ -15,14 +15,14 @@ Browser
   │     ├── /api/code-server/status  → Poll readiness
   │     └── /api/code-server/cleanup → Delete idle resources
   │
-  └── iframe → https://{slug}.tkweb.site → code-server pod (--auth=none)
+  └── iframe → https://{slug}.cs.tkweb.site → code-server pod (--auth=none)
 
 K3s Cluster
   ├── Per-user: Pod + Service + Ingress (created dynamically by API)
   ├── PVCs (persistent /home/coder/project storage)
   ├── Cleanup CronJob (every 30 min)
   ├── RBAC, NetworkPolicy, LimitRange
-  └── Wildcard TLS cert (*.tkweb.site via cert-manager)
+  └── Wildcard TLS cert (*.cs.tkweb.site via cert-manager)
 ```
 
 Key decisions:
@@ -35,8 +35,8 @@ Key decisions:
 ## Prerequisites
 
 1. **K3s cluster** with nginx-ingress-controller and cert-manager
-2. **Wildcard DNS**: `*.tkweb.site` → K3s ingress controller IP
-3. **Wildcard TLS cert**: cert-manager Certificate for `*.tkweb.site` → Secret `cs-wildcard-tls`
+2. **Wildcard DNS**: `*.cs.tkweb.site` → K3s ingress controller IP
+3. **Wildcard TLS cert**: cert-manager Certificate for `*.cs.tkweb.site` → Secret `wildcard-cs-tls`
 4. **PostgreSQL** accessible from wherever Next.js is hosted
 
 ## Quick Start
@@ -80,12 +80,12 @@ Centralized in `lib/code-server-config.ts`:
 
 | Variable                       | Default                             | Description                             |
 | ------------------------------ | ----------------------------------- | --------------------------------------- |
-| `CODE_SERVER_DOMAIN`           | `tkweb.site`                        | Wildcard domain for per-user subdomains |
+| `CODE_SERVER_DOMAIN`           | `cs.tkweb.site`                     | Wildcard domain for per-user subdomains |
 | `CODE_SERVER_IMAGE`            | `ghcr.io/coder/code-server:4.105.2` | Container image                         |
 | `CODE_SERVER_STORAGE_CLASS`    | `local-path`                        | PVC storage class                       |
 | `CODE_SERVER_PVC_SIZE`         | `1Gi`                               | Workspace storage size                  |
 | `CODE_SERVER_MAX_IDLE_MINUTES` | `120`                               | Idle timeout before cleanup             |
-| `CODE_SERVER_TLS_SECRET`       | `cs-wildcard-tls`                   | K8s TLS secret name                     |
+| `CODE_SERVER_TLS_SECRET`       | `wildcard-cs-tls`                   | K8s TLS secret name                     |
 
 ## Build
 
@@ -94,9 +94,14 @@ pnpm lint
 pnpm build
 ```
 
+## Operations Guides
+
+- [K3s API via Cloudflare Tunnel](docs/K3S-CLOUDFLARE-TUNNEL-API-ACCESS.md)
+- [K3s codelearn next steps (nginx + wildcard SSL)](docs/K3S-CODELEARN-NGINX-SSL-NEXT-STEPS.md)
+
 ## Project Structure
 
-```
+```text
 app/            Next.js pages and API routes
 components/     React client components
 lib/            Domain logic — auth, K8s client, code-server orchestration

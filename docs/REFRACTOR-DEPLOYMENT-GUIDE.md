@@ -71,7 +71,9 @@ Edit `k8s/secrets.yaml` with real values:
 - `BETTER_AUTH_API_KEY`
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
-- `CS_PROXY_SECRET`
+- `CODE_SERVER_DOMAIN`
+- `CODE_SERVER_TLS_SECRET`
+- `CODE_SERVER_CLEANUP_SECRET`
 
 ## GHCR pull secret
 
@@ -141,7 +143,7 @@ Functional checks:
 
 1. Login works.
 2. Opening a lesson creates/uses user workspace.
-3. Iframe loads through `cs-proxy.tkweb.site/u/<slug>/...`.
+3. Iframe loads through `https://<slug>.cs.tkweb.site`.
 4. WebSocket terminal/editor is stable.
 5. Idle cleanup removes pod and service but keeps PVC.
 
@@ -150,5 +152,5 @@ Functional checks:
 1. Add `k8s/overlays/staging` for pre-prod promotion.
 2. Add per-user namespace mode behind feature flag in orchestrator.
 3. Add orphan PVC report + admin cleanup workflow.
-4. Add secret rotation strategy for `CS_PROXY_SECRET`.
+4. Add secret rotation strategy for `CODE_SERVER_CLEANUP_SECRET`.
 5. Add policy checks in CI (e.g., kubeconform/conftest).

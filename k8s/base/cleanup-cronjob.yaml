@@ -27,7 +27,7 @@ spec:
                   valueFrom:
                     secretKeyRef:
                       name: codeforge-secrets
-                      key: CS_PROXY_SECRET
+                      key: CODE_SERVER_CLEANUP_SECRET
               resources:
                 requests:
                   cpu: 50m
