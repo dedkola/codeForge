@@ -157,6 +157,7 @@ export async function createPod(userId: string): Promise<void> {
               "--bind-addr=0.0.0.0:80",
               "--auth=none",
               "--disable-telemetry",
+              "--disable-frame-ancestors",
               "/home/coder/project",
             ],
             ports: [{ containerPort: 80 }],
