@@ -95,6 +95,53 @@ kubectl apply -k k8s/overlays/prod
 - base resources
 - `k8s/ssl` resources
 
+### 6.1) Apply order checklist (fresh vs existing cluster)
+
+Fresh cluster (first-time rollout):
+
+- [ ] Confirm controllers are ready (`cert-manager`, `ingress-nginx`)
+- [ ] Create Cloudflare token secret in `cert-manager`
+- [ ] Apply SSL resources first
+
+```bash
+kubectl apply -f /tmp/cloudflare-api-token-secret.yaml
+kubectl apply -k k8s/ssl
+kubectl wait --for=condition=Ready certificate/wildcard-cs -n codelearn --timeout=180s
+```
+
+- [ ] Apply application secrets and platform manifests
+
+```bash
+kubectl apply -f k8s/secrets.yaml
+kubectl apply -k k8s/overlays/prod
+```
+
+Existing cluster (update/rolling changes):
+
+- [ ] Re-apply secrets only if values changed
+- [ ] Re-apply SSL only if issuer/certificate config changed
+- [ ] Re-apply overlay to reconcile app and policy updates
+
+```bash
+# Optional, when secrets changed
+kubectl apply -f k8s/secrets.yaml
+
+# Optional, when SSL manifests changed
+kubectl apply -k k8s/ssl
+
+# Always apply desired state for app namespace
+kubectl apply -k k8s/overlays/prod
+```
+
+Post-apply quick verification:
+
+```bash
+kubectl get certificate -n codelearn wildcard-cs
+kubectl get secret -n codelearn wildcard-cs-tls
+kubectl get ingress -n codelearn
+kubectl get networkpolicy -n codelearn code-server-user-ingress
+```
+
 ## 7) Verify NetworkPolicy allows ingress correctly
 
 The policy now allows traffic to `code-server-user` pods from:
