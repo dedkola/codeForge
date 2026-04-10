@@ -17,10 +17,16 @@ export async function ensureTable(): Promise<void> {
       pod_name    TEXT NOT NULL,
       svc_name    TEXT NOT NULL,
       pvc_name    TEXT NOT NULL,
+      password    TEXT NOT NULL DEFAULT '',
       status      TEXT NOT NULL DEFAULT 'pending',
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       last_active TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+  // Add password column if upgrading from older schema
+  await pool.query(`
+    ALTER TABLE code_server_instance
+    ADD COLUMN IF NOT EXISTS password TEXT NOT NULL DEFAULT ''
   `);
 }
 

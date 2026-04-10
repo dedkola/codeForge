@@ -330,7 +330,7 @@ export default function CodeServerPanel({
           setError(true);
           setTimedOut(false);
         }}
-        allow="clipboard-read; clipboard-write"
+        allow="fullscreen"
         title="code-server VS Code environment"
       />
     </>

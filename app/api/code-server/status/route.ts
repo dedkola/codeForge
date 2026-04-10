@@ -11,12 +11,15 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const status = await getUserCodeServerStatus(session.user.id);
+  const result = await getUserCodeServerStatus(session.user.id);
 
   let url: string | undefined;
-  if (status === "ready") {
+  if (result.status === "ready") {
     url = buildCodeServerUrl(userSlug(session.user.id));
   }
 
-  return NextResponse.json({ status, url });
+  return NextResponse.json({
+    status: result.status,
+    url,
+  });
 }

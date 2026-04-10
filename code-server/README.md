@@ -5,16 +5,18 @@ Each authenticated user gets their own isolated code-server pod, created dynamic
 ## Architecture
 
 - **Per-user pods** are created by the Next.js app via the Kubernetes API
-- **cs-proxy** authenticates and proxies traffic to each user's pod (see `../cs-proxy/`)
+- **Traefik Ingress** routes `<slug>.codelearn.tkweb.site` directly to each user's pod (no proxy)
+- **`--auth=none`** — users are already authenticated via Better Auth; workspace URLs use 32-char hex slugs (128-bit entropy)
 - **Namespace**: `codelearn` (defined in `namespace.yaml`)
 
 ## Per-User Resources (created dynamically)
 
 For each user, the app creates:
 
-- **Pod** `cs-<userSlug>`: `ghcr.io/coder/code-server:4.105.2` with password auth
-- **PVC** `cs-pvc-<userSlug>`: 1Gi persistent workspace
-- **Service** `cs-svc-<userSlug>`: ClusterIP routing to the pod
+- **Pod** `cs-<slug>`: `ghcr.io/coder/code-server:4.105.2` with `--auth=none`
+- **PVC** `cs-pvc-<slug>`: 1Gi persistent workspace
+- **Service** `cs-svc-<slug>`: ClusterIP routing to the pod
+- **Ingress** `cs-ing-<slug>`: Traefik Ingress with wildcard TLS (`*.codelearn.tkweb.site`)
 
 These are managed by the Next.js app and cleaned up by a CronJob (see `../k8s/cleanup-cronjob.yaml`).
 
@@ -32,10 +34,11 @@ These are managed by the Next.js app and cleaned up by a CronJob (see `../k8s/cl
    kubectl apply -f ../k8s/rbac.yaml
    ```
 
-3. Deploy the proxy service:
+3. Ensure cert-manager is installed with the `letsencrypt-dns-prod` ClusterIssuer and wildcard certificate:
 
    ```bash
-   kubectl apply -f ../cs-proxy/k8s/
+   kubectl apply -f ../k8s/ssl/clusterissuer.yaml
+   kubectl apply -f ../k8s/ssl/cert.yaml
    ```
 
-4. Create DNS record `cs-proxy.tkweb.site` pointing to the cluster.
+4. Ensure wildcard DNS `*.codelearn.tkweb.site` points to the K3s node and ports 80/443 are forwarded.

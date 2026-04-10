@@ -1,10 +1,10 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: wildcard-cs
+  name: wildcard-codelearn
   namespace: codelearn
 spec:
-  secretName: wildcard-cs-tls
+  secretName: wildcard-codelearn-tls
   duration: 2160h
   renewBefore: 720h
   privateKey:
@@ -12,9 +12,9 @@ spec:
     size: 2048
     rotationPolicy: Always
   issuerRef:
-    name: cloudflare-issuer
+    name: letsencrypt-dns-prod
     kind: ClusterIssuer
     group: cert-manager.io
   dnsNames:
-    - "cs.tkweb.site"
-    - "*.cs.tkweb.site"
+    - "codelearn.tkweb.site"
+    - "*.codelearn.tkweb.site"

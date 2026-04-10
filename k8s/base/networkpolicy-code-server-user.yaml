@@ -16,13 +16,10 @@ spec:
               app: cloudflared
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: ingress-nginx
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: codelearn
+              kubernetes.io/metadata.name: kube-system
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: ingress-nginx
+              app.kubernetes.io/name: traefik
       ports:
         - protocol: TCP
           port: 8080

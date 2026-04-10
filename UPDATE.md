@@ -1,77 +1,67 @@
 # CodeForge — Deployment & Operations Guide
 
-## Refactor status (April 2026)
+## Current Architecture (May 2026)
 
-- Runtime policy values moved to `lib/code-server-config.ts`.
-- Code-server image is now pinned by default (`ghcr.io/coder/code-server:4.105.2`) instead of `latest`.
-- API and manager idle/timeout/proxy behavior now consume shared config (no duplicated hardcoded values).
-- K8s baseline now includes `NetworkPolicy` and `LimitRange` for per-user workloads via `k8s/kustomization.yaml`.
-- K8s now has `base` + `overlays` structure; `kubectl apply -k k8s` deploys the full stack umbrella.
-- Deployment order is now explicit: apply `k8s/secrets.yaml` first, then apply Kustomize overlay/umbrella.
-
-This guide remains valid; the next refactor phases will split docs into dedicated architecture and runbook files.
+- Each user gets a dedicated code-server pod with `--auth=none` (users are already authenticated via Better Auth)
+- Per-user Traefik Ingress routes `<slug>.codelearn.tkweb.site` directly to the user's pod — no proxy layer
+- Workspace URLs use 32-char hex slugs (128-bit entropy from `sha256(userId)`)
+- Wildcard TLS via cert-manager (`letsencrypt-dns-prod` ClusterIssuer, DNS-01 challenge via Cloudflare)
+- Runtime config centralized in `lib/code-server-config.ts`
+- K8s manifests use `base` + `overlays` structure via Kustomize
 
 ## How it all fits together
 
 ```text
 User browser
     │
-    ├── https://codeforge.tkweb.site  (Next.js app)
-    │       │  - Login (Better Auth)
-    │       │  - Lesson pages
-    │       │  - Creates K8s pod/PVC/Service per user on demand
+    ├── https://codeforge.tkweb.site  (Next.js app — Vercel / local dev)
+    │       │  - Login (Better Auth: email/password + Google + GitHub OAuth)
+    │       │  - Lesson pages (split-panel: markdown + iframe)
+    │       │  - Creates K8s Pod/PVC/Service/Ingress per user on demand
     │       │
-    │       └── calls K8s API (in-cluster via ServiceAccount)
+    │       └── calls K8s API via:
+    │             - In-cluster ServiceAccount, OR
+    │             - Cloudflare Tunnel (k8s.tkweb.site → localhost:6443)
     │
-    └── https://cs-proxy.tkweb.site/u/<slug>/  (cs-proxy)
-            │  - Verifies JWT token for that slug path
-            │  - Sets `cs_session` cookie scoped to `/u/<slug>`
-            │  - Reverse-proxies HTTP + WebSocket to the user's code-server pod
+    └── https://<slug>.codelearn.tkweb.site  (per-user Traefik Ingress)
+            │  - Wildcard TLS cert (*.codelearn.tkweb.site)
+            │  - Routes directly to code-server pod (no proxy)
             │
-            └── http://cs-svc-<slug>.codelearn.svc.cluster.local:80
-                    └── code-server pod  (VS Code in browser)
-                            └── PVC: /home/coder/project  (1 Gi, per user, persists)
+            └── code-server pod (--auth=none, VS Code in browser)
+                    └── PVC: /home/coder/project (1 Gi, persists across pod restarts)
 ```
 
 ### Kubernetes namespace: `codelearn`
 
-Everything lives in the `codelearn` namespace:
-
-| Resource          | Name pattern        | What it is                                  |
-| ----------------- | ------------------- | ------------------------------------------- |
-| Deployment        | `codeforge`         | Next.js app (3 replicas)                    |
-| Deployment        | `cs-proxy`          | Reverse proxy (1 replica)                   |
-| Service           | `codeforge-service` | Routes traffic to Next.js pods              |
-| Service           | `cs-proxy`          | Routes traffic to cs-proxy pod              |
-| Ingress           | `codeforge-ingress` | `codeforge.tkweb.site` → codeforge-service  |
-| Ingress           | `cs-proxy`          | `cs-proxy.tkweb.site` → cs-proxy service    |
-| CronJob           | `cs-cleanup`        | Deletes idle code-server pods every 30 min  |
-| Secret            | `codeforge-secrets` | All env secrets                             |
-| ServiceAccount    | `codeforge-sa`      | Gives Next.js app permission to manage pods |
-| Pod (dynamic)     | `cs-<slug>`         | Per-user code-server instance               |
-| Service (dynamic) | `cs-svc-<slug>`     | Per-user ClusterIP service                  |
-| PVC (dynamic)     | `cs-pvc-<slug>`     | Per-user 1 Gi workspace volume              |
+| Resource          | Name pattern              | What it is                                     |
+| ----------------- | ------------------------- | ---------------------------------------------- |
+| CronJob           | `cs-cleanup`              | Deletes idle code-server pods every 30 min     |
+| Secret            | `codeforge-secrets`       | All env secrets                                |
+| ServiceAccount    | `codeforge-sa`            | Gives Next.js app permission to manage pods    |
+| Certificate       | `wildcard-codelearn-cert` | Wildcard TLS cert for `*.codelearn.tkweb.site` |
+| Pod (dynamic)     | `cs-<slug>`               | Per-user code-server instance                  |
+| Service (dynamic) | `cs-svc-<slug>`           | Per-user ClusterIP service                     |
+| PVC (dynamic)     | `cs-pvc-<slug>`           | Per-user 1 Gi workspace volume                 |
+| Ingress (dynamic) | `cs-ing-<slug>`           | Per-user Traefik Ingress with TLS              |
 
 ---
 
 ## How per-user code-server instances work
 
 1. User logs in → navigates to a lesson page
-2. The Next.js server calls `ensureUserCodeServer(userId)`:
-   - Computes a deterministic 12-char hex slug: `sha256(userId).slice(0,12)`
+2. The Next.js server component calls `ensureUserCodeServer(userId)`:
+   - Computes a deterministic 32-char hex slug: `sha256(userId).hex.slice(0, 32)`
    - Creates a PVC `cs-pvc-<slug>` (1 Gi, `local-path`, persists across pod restarts)
+   - Creates a pod `cs-<slug>` running `ghcr.io/coder/code-server:4.105.2` with `--auth=none`; workspace dir: `/home/coder/project` (mounted from PVC)
+   - Creates a ClusterIP service `cs-svc-<slug>` pointing at that pod
+   - Creates a Traefik Ingress `cs-ing-<slug>` with TLS termination using the wildcard cert
+   - Waits up to 15 s for the pod readiness probe to pass
+3. Frontend renders an `<iframe>` pointing to `https://<slug>.codelearn.tkweb.site`
+4. `CodeServerPanel` (client component) polls `/api/code-server/status` every 3s while pod is starting
 
-- Creates a pod `cs-<slug>` running `ghcr.io/coder/code-server:4.105.2`  
-  workspace dir: `/home/coder/project` (mounted from PVC)
-- Creates a ClusterIP service `cs-svc-<slug>` pointing at that pod
-- Waits up to 15 s for the pod readiness probe to pass
+**Security:** Workspace URLs contain 32 hex characters (128 bits of entropy) — computationally infeasible to guess. Same security model as Google Docs share links.
 
-1. App generates a signed JWT: `{ sub: userId, svc: "cs-svc-<slug>", exp: 8h }`
-1. Frontend renders an `<iframe>` pointing to `https://cs-proxy.tkweb.site/u/<slug>/?token=<JWT>`
-1. cs-proxy verifies JWT, validates that path slug matches `svc`, sets `cs_session` cookie **scoped to `/u/<slug>`**, then redirects to `https://cs-proxy.tkweb.site/u/<slug>/`
-1. All subsequent requests from within the iframe use the cookie on that path; cs-proxy re-validates slug ↔ service mapping and proxies to `http://cs-svc-<slug>.codelearn.svc.cluster.local:80`
-
-**Persistence:** The PVC is never deleted automatically. The pod is deleted by the CronJob after 120 min idle (no lesson page open), but the next visit recreates the pod and remounts the same PVC — files are always there.
+**Persistence:** The PVC is never deleted automatically. The pod is deleted by the CronJob after 120 min idle, but the next visit recreates the pod and remounts the same PVC — files are always there.
 
 ---
 
@@ -79,132 +69,98 @@ Everything lives in the `codelearn` namespace:
 
 ### Prerequisites
 
-- k3s running, `kubectl` pointing at it
-- `ghcr-secret` image pull secret created in `codelearn` namespace (for GHCR)
-- Cloudflared tunnel configured for `codeforge.tkweb.site` and `cs-proxy.tkweb.site`
-- DNS: `codeforge.tkweb.site` and `cs-proxy.tkweb.site` → cloudflared tunnel
+- K3s running with Traefik ingress controller (included by default)
+- `kubectl` pointing at the cluster
+- Ports 80 and 443 forwarded from router to K3s node IP
+- Wildcard DNS: `*.codelearn.tkweb.site` → K3s node public IP
+- Cloudflare account with the domain for DNS-01 challenges
 
-### 1. Create the namespace
-
-```bash
-kubectl apply -f code-server/namespace.yaml
-```
-
-### 2. Create the GHCR image pull secret
+### 1. Install cert-manager
 
 ```bash
-kubectl create secret docker-registry ghcr-secret \
-  --docker-server=ghcr.io \
-  --docker-username=<your-github-username> \
-  --docker-password=<github-PAT-with-read:packages> \
-  --docker-email=<your-email> \
-  -n codelearn
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
+kubectl -n cert-manager rollout status deploy --timeout=120s
 ```
 
-### 3. Edit secrets before deploying
+### 2. Create Cloudflare API token secret
 
-Open `k8s/secrets.yaml` and set real values for every key — especially:
+```bash
+kubectl -n cert-manager create secret generic cloudflare-api-token-secret \
+  --from-literal=api-token=<your-cloudflare-api-token>
+```
 
-- `CS_PROXY_SECRET` — random 32+ char string (shared between Next.js and cs-proxy)
-- `DATABASE_URL` — your Neon (or other Postgres) connection string
-- `BETTER_AUTH_SECRET` — random secret for session signing
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — from Google Cloud Console
+### 3. Apply ClusterIssuer and wildcard certificate
 
-### 4. Deploy the main app
+```bash
+kubectl apply -f k8s/ssl/clusterissuer.yaml   # letsencrypt-dns-prod
+kubectl apply -f k8s/ssl/cert.yaml             # *.codelearn.tkweb.site
+```
+
+Wait for the certificate to be issued:
+
+```bash
+kubectl -n codelearn get certificate
+# NAME                        READY
+# wildcard-codelearn-cert     True
+```
+
+### 4. Apply CodeForge K8s resources
 
 ```bash
 kubectl apply -k k8s/
 ```
 
-This applies: Deployment, Service, Ingress, RBAC, Secret, ConfigMap, CronJob — all in `codelearn`.
+This applies: namespace, RBAC (`codeforge-sa`), NetworkPolicy, LimitRange, cleanup CronJob.
 
 Verify:
 
 ```bash
-kubectl get pods -n codelearn
-# codeforge-xxxxxxxxx-xxxxx   1/1   Running   ...
+kubectl get all -n codelearn
 ```
 
-### 5. Build and deploy cs-proxy (one time, then only if `cs-proxy` code changes)
+### 5. Create a ServiceAccount token
 
 ```bash
-# Build and push the cs-proxy image
-docker build -t ghcr.io/dedkola/cs-proxy:latest ./cs-proxy
-docker push ghcr.io/dedkola/cs-proxy:latest
-
-# Deploy cs-proxy to the cluster
-kubectl apply -f cs-proxy/k8s/
+kubectl -n codelearn create token codeforge-sa --duration=8760h
 ```
 
-`cs-proxy` reads `CS_PROXY_SECRET` from the same `codeforge-secrets` Secret/key used by the Next.js app.
+Use this as `K8S_AUTH_TOKEN` in your `.env.local` (only needed if running Next.js outside the cluster).
 
-Verify:
+### 6. Edit secrets (if deploying to K8s)
+
+Copy and edit `k8s/secrets.yaml.example`:
 
 ```bash
-kubectl get pods -n codelearn
-# cs-proxy-xxxxxxxxx-xxxxx    1/1   Running   ...
+cp k8s/secrets.yaml.example k8s/secrets.yaml
+# Edit k8s/secrets.yaml with real values
+kubectl apply -f k8s/secrets.yaml
 ```
 
-### 6. Cloudflared routing
+### 7. Cloudflare Tunnel (K8s API access)
 
-In your cloudflared tunnel config (usually `~/.cloudflared/config.yml` or the Cloudflare dashboard), route both hostnames to your k3s ingress:
+If running Next.js outside the cluster (e.g. Vercel or local dev), set up a Cloudflare Tunnel for K8s API access:
 
-```yaml
-ingress:
-  - hostname: "codeforge.tkweb.site"
-    service: https://<k3s-node-ip>:443
-    originRequest:
-      noTLSVerify: true # if using self-signed cert on ingress
-  - hostname: "cs-proxy.tkweb.site"
-    service: https://<k3s-node-ip>:443
-    originRequest:
-      noTLSVerify: true
-  - service: http_status:404
-```
-
-> **Note:** This setup does not require wildcard DNS or wildcard TLS. `cs-proxy` isolates users by signed token + `/u/<slug>` path validation.
+See [K3s API via Cloudflare Tunnel](docs/K3S-CLOUDFLARE-TUNNEL-API-ACCESS.md).
 
 ---
 
-## Redeploying the Next.js app (normal workflow)
+## Redeploying the Next.js app
 
-GitHub Actions handles this automatically on every push to `main`:
+GitHub Actions (`.github/workflows/docker-build.yml`) builds and pushes Docker images on every push to `main`:
 
-1. Push code to `main`
-2. GitHub Actions (`.github/workflows/docker-build.yml`) builds a multi-arch Docker image and pushes two tags to GHCR:
-   - `ghcr.io/dedkola/codeforge:latest`
-   - `ghcr.io/dedkola/codeforge:<timestamp>-<sha>` (e.g. `20260401121306-681a865`)
-3. **Manually roll out the new image** on the cluster:
+- `ghcr.io/dedkola/codeforge:latest`
+- `ghcr.io/dedkola/codeforge:<timestamp>-<sha>`
+
+Roll out the new image:
 
 ```bash
-# Option A — force pull of :latest
 kubectl rollout restart deployment/codeforge -n codelearn
-
-# Option B — pin to a specific tag (edit deployment.yaml image line, then apply)
-kubectl apply -f k8s/deployment.yaml
-```
-
-> The `deployment.yaml` has a Flux CD image policy comment (`{"$imagepolicy": ...}`). If you set up [Flux CD image automation](https://fluxcd.io/flux/guides/image-update/), it will automatically update the image tag in Git and apply it to the cluster whenever a new tag is pushed. Without Flux, use option A or B above.
-
-Check rollout status:
-
-```bash
 kubectl rollout status deployment/codeforge -n codelearn
 ```
 
 ---
 
-## Redeploying cs-proxy (only when `cs-proxy/server.js` changes)
-
-```bash
-docker build -t ghcr.io/dedkola/cs-proxy:latest ./cs-proxy
-docker push ghcr.io/dedkola/cs-proxy:latest
-kubectl rollout restart deployment/cs-proxy -n codelearn
-```
-
----
-
-## Updating K8s manifests (secrets, config, RBAC, etc.)
+## Updating K8s manifests
 
 ```bash
 # Re-apply everything
@@ -228,11 +184,12 @@ kubectl get pods -n codelearn -l app=code-server-user
 # See per-user PVCs (these persist even after pod cleanup)
 kubectl get pvc -n codelearn
 
-# Tail Next.js app logs
-kubectl logs -n codelearn -l app=codeforge --tail=100 -f
+# See per-user ingresses
+kubectl get ingress -n codelearn
 
-# Tail cs-proxy logs
-kubectl logs -n codelearn -l app=cs-proxy --tail=100 -f
+# Check wildcard TLS certificate status
+kubectl -n codelearn get certificate
+kubectl -n codelearn describe certificate wildcard-codelearn-cert
 
 # Tail a specific user's code-server logs
 kubectl logs -n codelearn cs-<slug> -f
@@ -251,18 +208,22 @@ kubectl delete pvc cs-pvc-<slug> -n codelearn
 
 ## Environment variables reference
 
-All injected from `codeforge-secrets` Secret:
+For local development, set these in `.env.local`:
 
-| Variable               | Used by            | Description                                                                     |
-| ---------------------- | ------------------ | ------------------------------------------------------------------------------- |
-| `DATABASE_URL`         | Next.js            | Postgres connection string (Neon)                                               |
-| `BETTER_AUTH_SECRET`   | Next.js            | Session signing secret                                                          |
-| `BETTER_AUTH_URL`      | Next.js            | Public URL of the app                                                           |
-| `BETTER_AUTH_API_KEY`  | Next.js            | Better Auth dashboard key                                                       |
-| `GOOGLE_CLIENT_ID`     | Next.js            | OAuth                                                                           |
-| `GOOGLE_CLIENT_SECRET` | Next.js            | OAuth                                                                           |
-| `CS_PROXY_SECRET`      | Next.js + cs-proxy | Shared secret for JWT signing                                                   |
-| `CS_PROXY_URL`         | Next.js            | Set in deployment.yaml as plain env (not secret): `https://cs-proxy.tkweb.site` |
+| Variable                     | Description                                                       |
+| ---------------------------- | ----------------------------------------------------------------- |
+| `DATABASE_URL`               | Postgres connection string (Neon)                                 |
+| `BETTER_AUTH_SECRET`         | Session signing secret                                            |
+| `BETTER_AUTH_URL`            | Public URL of the app                                             |
+| `GOOGLE_CLIENT_ID`           | OAuth                                                             |
+| `GOOGLE_CLIENT_SECRET`       | OAuth                                                             |
+| `GITHUB_CLIENT_ID`           | OAuth                                                             |
+| `GITHUB_CLIENT_SECRET`       | OAuth                                                             |
+| `K8S_API_SERVER`             | K8s API URL (e.g. `https://k8s.tkweb.site` via Cloudflare Tunnel) |
+| `K8S_AUTH_TOKEN`             | Long-lived ServiceAccount token                                   |
+| `CODE_SERVER_DOMAIN`         | Default: `codelearn.tkweb.site`                                   |
+| `CODE_SERVER_TLS_SECRET`     | Default: `wildcard-codelearn-tls`                                 |
+| `CODE_SERVER_CLEANUP_SECRET` | Random secret for cleanup API auth                                |
 
 ---
 
@@ -276,26 +237,22 @@ kubectl get storageclass
 # Should show: local-path (default)
 ```
 
-**`ImagePullBackOff` on codeforge pod**  
-The `ghcr-secret` pull secret is missing or expired:
+**Wildcard TLS cert not ready**  
+Check cert-manager logs and certificate status:
 
 ```bash
-kubectl describe pod <pod-name> -n codelearn | grep -A5 Events
+kubectl -n codelearn describe certificate wildcard-codelearn-cert
+kubectl -n cert-manager logs -l app=cert-manager --tail=50
 ```
 
-**Users see 401 in the iframe**  
-The `CS_PROXY_SECRET` in `codeforge-secrets` doesn't match the one in the cs-proxy deployment env. Both must be identical.
-
-**Users see 403 in the iframe**  
-The slug in `/u/<slug>/` doesn't match the JWT service claim (`cs-svc-<slug>`). Regenerate the iframe URL from the app.
-
-**Iframe shows "Bad Gateway"**  
+**Iframe shows "Bad Gateway" or connection refused**  
 The user's code-server pod is not ready yet. Wait a few seconds and reload. If it persists:
 
 ```bash
 kubectl get pod cs-<slug> -n codelearn
 kubectl describe pod cs-<slug> -n codelearn
+kubectl get ingress cs-ing-<slug> -n codelearn
 ```
 
-**Two users see the same files**  
-All user proxy URLs must use path format `https://cs-proxy.tkweb.site/u/<slug>/`. `cs-proxy` enforces slug/path to service mapping and cookie path scoping (`/u/<slug>`). Verify `CS_PROXY_URL` in `k8s/deployment.yaml` is `https://cs-proxy.tkweb.site`.
+**Iframe blocked by browser**  
+Check that `next.config.ts` has `frame-src https://*.codelearn.tkweb.site` in the CSP header.

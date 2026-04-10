@@ -9,9 +9,9 @@ import {
   CODE_SERVER_TLS_SECRET,
 } from "./code-server-config";
 
-/** Produce a K8s-safe slug from a user ID (lowercase hex, 12 chars). */
+/** Produce a K8s-safe slug from a user ID (lowercase hex, 32 chars / 128 bits). */
 export function userSlug(userId: string): string {
-  return createHash("sha256").update(userId).digest("hex").slice(0, 12);
+  return createHash("sha256").update(userId).digest("hex").slice(0, 32);
 }
 
 export function resourceNames(userId: string) {
@@ -319,14 +319,11 @@ export async function createIngress(userId: string): Promise<void> {
         namespace: NAMESPACE,
         labels: userResourceLabels(slug),
         annotations: {
-          "nginx.ingress.kubernetes.io/ssl-redirect": "true",
-          "nginx.ingress.kubernetes.io/proxy-http-version": "1.1",
-          "nginx.ingress.kubernetes.io/proxy-read-timeout": "3600",
-          "nginx.ingress.kubernetes.io/proxy-send-timeout": "3600",
+          "cert-manager.io/cluster-issuer": "letsencrypt-dns-prod",
         },
       },
       spec: {
-        ingressClassName: "nginx",
+        ingressClassName: "traefik",
         tls: [
           {
             hosts: [host],

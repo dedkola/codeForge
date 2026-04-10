@@ -26,10 +26,10 @@ export const CODE_SERVER_POD_READY_TIMEOUT_MS = parsePositiveInt(
 export const CODE_SERVER_PORT = 8080;
 
 export const CODE_SERVER_DOMAIN =
-  process.env.CODE_SERVER_DOMAIN ?? "cs.tkweb.site";
+  process.env.CODE_SERVER_DOMAIN ?? "codelearn.tkweb.site";
 
 export const CODE_SERVER_TLS_SECRET =
-  process.env.CODE_SERVER_TLS_SECRET ?? "wildcard-cs-tls";
+  process.env.CODE_SERVER_TLS_SECRET ?? "wildcard-codelearn-tls";
 
 export function buildCodeServerHost(slug: string): string {
   return `${slug}.${CODE_SERVER_DOMAIN}`;

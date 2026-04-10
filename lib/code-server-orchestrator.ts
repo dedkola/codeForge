@@ -39,6 +39,8 @@ export async function ensureUserCodeServer(
   if (existing && existing.status === "running") {
     const phase = await getPodStatus(userId);
     if (phase === "Running") {
+      // Ensure ingress exists even if pod is already running
+      await createIngress(userId);
       await touchLastActive(userId);
       return { status: "ready", url };
     }
@@ -99,20 +101,22 @@ export async function cleanupStaleInstances(
   return stale.length;
 }
 
-export async function getUserCodeServerStatus(
-  userId: string,
-): Promise<"ready" | "starting" | "stopped" | "error" | "none"> {
+export async function getUserCodeServerStatus(userId: string): Promise<{
+  status: "ready" | "starting" | "stopped" | "error" | "none";
+}> {
   const instance = await getInstanceByUserId(userId);
-  if (!instance) return "none";
+  if (!instance) return { status: "none" };
 
   if (instance.status === "running") {
     const phase = await getPodStatus(userId);
     if (phase === "Running") {
       await touchLastActive(userId);
-      return "ready";
+      return { status: "ready" };
     }
-    return "starting";
+    return { status: "starting" };
   }
 
-  return instance.status as "starting" | "stopped" | "error";
+  return {
+    status: instance.status as "starting" | "stopped" | "error",
+  };
 }
