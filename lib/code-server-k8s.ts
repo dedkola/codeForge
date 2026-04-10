@@ -194,6 +194,7 @@ export async function createPod(
             env: [
               { name: "HOME", value: "/home/coder" },
               { name: "CS_DISABLE_IFRAME_PROTECTION", value: "true" },
+              { name: "WORKSPACE", value: `/home/coder/ws-${resetCount}` },
             ],
             resources: {
               requests: {

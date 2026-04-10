@@ -9,11 +9,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && corepack prepare pnpm@latest --activate \
     && rm -rf /var/lib/apt/lists/*
 
-# Scaffold a Next.js template at build time
-RUN npx --yes create-next-app@latest /template \
+# Scaffold a Next.js template at build time inside coder home
+RUN npx --yes create-next-app@latest /home/coder/template \
       --ts --eslint --app --src-dir --no-tailwind \
       --import-alias "@/*" --use-pnpm \
-    && chown -R 1000:1000 /template
+    && chown -R 1000:1000 /home/coder/template
 
 # Custom entrypoint that seeds workspace on first run
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
