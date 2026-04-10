@@ -1,9 +1,13 @@
 import type { NextConfig } from "next";
 
-const csDomain = process.env.CODE_SERVER_DOMAIN ?? "codelearn.tkweb.site";
+const csDomain = process.env.CODE_SERVER_DOMAIN;
+
+const allowedOrigins = process.env.ALLOWED_DEV_ORIGINS
+  ? process.env.ALLOWED_DEV_ORIGINS.split(",").map((o) => o.trim())
+  : [];
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["192.168.0.192"],
+  allowedDevOrigins: allowedOrigins,
   async headers() {
     return [
       {

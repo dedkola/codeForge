@@ -42,4 +42,4 @@ export function getNetworkingV1Api(): k8s.NetworkingV1Api {
   return _networkingV1Api;
 }
 
-export const NAMESPACE = process.env.K8S_NAMESPACE ?? "codelearn";
+export const NAMESPACE = process.env.K8S_NAMESPACE;

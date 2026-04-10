@@ -2,7 +2,13 @@ import { createHash } from "crypto";
 import { getCoreV1Api, getNetworkingV1Api, NAMESPACE } from "./k8s";
 import {
   buildCodeServerHost,
+  CODE_SERVER_CLUSTER_ISSUER,
+  CODE_SERVER_CPU_LIMIT,
+  CODE_SERVER_CPU_REQUEST,
   CODE_SERVER_IMAGE,
+  CODE_SERVER_INGRESS_CLASS,
+  CODE_SERVER_MEMORY_LIMIT,
+  CODE_SERVER_MEMORY_REQUEST,
   CODE_SERVER_PORT,
   CODE_SERVER_PVC_SIZE,
   CODE_SERVER_STORAGE_CLASS,
@@ -169,8 +175,14 @@ export async function createPod(userId: string): Promise<void> {
               { name: "CS_DISABLE_IFRAME_PROTECTION", value: "true" },
             ],
             resources: {
-              requests: { memory: "256Mi", cpu: "100m" },
-              limits: { memory: "512Mi", cpu: "500m" },
+              requests: {
+                memory: CODE_SERVER_MEMORY_REQUEST,
+                cpu: CODE_SERVER_CPU_REQUEST,
+              },
+              limits: {
+                memory: CODE_SERVER_MEMORY_LIMIT,
+                cpu: CODE_SERVER_CPU_LIMIT,
+              },
             },
             volumeMounts: [
               { name: "workspace", mountPath: "/home/coder/project" },
@@ -319,11 +331,11 @@ export async function createIngress(userId: string): Promise<void> {
         namespace: NAMESPACE,
         labels: userResourceLabels(slug),
         annotations: {
-          "cert-manager.io/cluster-issuer": "letsencrypt-dns-prod",
+          "cert-manager.io/cluster-issuer": CODE_SERVER_CLUSTER_ISSUER,
         },
       },
       spec: {
-        ingressClassName: "traefik",
+        ingressClassName: CODE_SERVER_INGRESS_CLASS,
         tls: [
           {
             hosts: [host],
