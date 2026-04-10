@@ -15,7 +15,7 @@ export async function GET() {
 
   let url: string | undefined;
   if (result.status === "ready") {
-    url = buildCodeServerUrl(userSlug(session.user.id));
+    url = buildCodeServerUrl(userSlug(session.user.id), result.resetCount);
   }
 
   return NextResponse.json({

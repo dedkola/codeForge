@@ -47,6 +47,9 @@ export function buildCodeServerHost(slug: string): string {
   return `${slug}.${CODE_SERVER_DOMAIN}`;
 }
 
-export function buildCodeServerUrl(slug: string): string {
-  return `https://${buildCodeServerHost(slug)}`;
+export function buildCodeServerUrl(
+  slug: string,
+  resetCount: number = 0,
+): string {
+  return `https://${buildCodeServerHost(slug)}/?folder=/home/coder/ws-${resetCount}`;
 }

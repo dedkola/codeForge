@@ -17,6 +17,7 @@ import {
   updateStatus,
   touchLastActive,
   getStaleInstances,
+  incrementResetCount,
 } from "./code-server-db";
 import {
   CODE_SERVER_MAX_IDLE_MINUTES,
@@ -33,9 +34,10 @@ export async function ensureUserCodeServer(
   userId: string,
 ): Promise<EnsureResult> {
   const { pod, svc, pvc, slug } = resourceNames(userId);
-  const url = buildCodeServerUrl(slug);
 
   const existing = await getInstanceByUserId(userId);
+  const resetCount = existing?.reset_count ?? 0;
+  const url = buildCodeServerUrl(slug, resetCount);
 
   if (existing && existing.status === "running") {
     const phase = await getPodStatus(userId);
@@ -50,7 +52,7 @@ export async function ensureUserCodeServer(
 
   try {
     await createPVC(userId);
-    await createPod(userId);
+    await createPod(userId, resetCount);
     await createService(userId);
     await createIngress(userId);
   } catch (err) {
@@ -104,21 +106,25 @@ export async function cleanupStaleInstances(
 
 export async function getUserCodeServerStatus(userId: string): Promise<{
   status: "ready" | "starting" | "stopped" | "error" | "none";
+  resetCount: number;
 }> {
   const instance = await getInstanceByUserId(userId);
-  if (!instance) return { status: "none" };
+  if (!instance) return { status: "none", resetCount: 0 };
+
+  const resetCount = instance.reset_count ?? 0;
 
   if (instance.status === "running") {
     const phase = await getPodStatus(userId);
     if (phase === "Running") {
       await touchLastActive(userId);
-      return { status: "ready" };
+      return { status: "ready", resetCount };
     }
-    return { status: "starting" };
+    return { status: "starting", resetCount };
   }
 
   return {
     status: instance.status as "starting" | "stopped" | "error",
+    resetCount,
   };
 }
 
@@ -131,6 +137,10 @@ export async function resetUserWorkspace(
   await deleteIngress(userId);
   await deletePVC(userId);
   await updateStatus(userId, "stopped");
+
+  // Increment reset counter — gives VS Code a new workspace identity
+  // so the browser won't restore stale editor tabs from before the reset
+  await incrementResetCount(userId);
 
   // Re-create from scratch — PVC will be fresh, entrypoint seeds the template
   return ensureUserCodeServer(userId);

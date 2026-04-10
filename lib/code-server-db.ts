@@ -6,6 +6,7 @@ export interface CodeServerInstance {
   svc_name: string;
   pvc_name: string;
   status: string;
+  reset_count: number;
   created_at: Date;
   last_active: Date;
 }
@@ -27,6 +28,11 @@ export async function ensureTable(): Promise<void> {
   await pool.query(`
     ALTER TABLE code_server_instance
     ADD COLUMN IF NOT EXISTS password TEXT NOT NULL DEFAULT ''
+  `);
+  // Add reset_count column if upgrading from older schema
+  await pool.query(`
+    ALTER TABLE code_server_instance
+    ADD COLUMN IF NOT EXISTS reset_count INTEGER NOT NULL DEFAULT 0
   `);
 }
 
@@ -84,4 +90,15 @@ export async function getStaleInstances(
     [olderThan],
   );
   return result.rows;
+}
+
+export async function incrementResetCount(userId: string): Promise<number> {
+  const result = await pool.query(
+    `UPDATE code_server_instance
+     SET reset_count = reset_count + 1, last_active = NOW()
+     WHERE id = $1
+     RETURNING reset_count`,
+    [userId],
+  );
+  return result.rows[0]?.reset_count ?? 0;
 }

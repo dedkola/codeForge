@@ -87,6 +87,24 @@ async function waitForPodDeletion(
   }
 }
 
+async function waitForPVCDeletion(
+  name: string,
+  timeoutMs = 30000,
+): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      await getCoreV1Api().readNamespacedPersistentVolumeClaim({
+        name,
+        namespace: NAMESPACE,
+      });
+      await new Promise((r) => setTimeout(r, 1000));
+    } catch {
+      return;
+    }
+  }
+}
+
 export async function createPVC(userId: string): Promise<void> {
   const { pvc, slug } = resourceNames(userId);
   try {
@@ -116,7 +134,10 @@ export async function createPVC(userId: string): Promise<void> {
   });
 }
 
-export async function createPod(userId: string): Promise<void> {
+export async function createPod(
+  userId: string,
+  resetCount: number = 0,
+): Promise<void> {
   const { pod, pvc, slug } = resourceNames(userId);
   try {
     const existing = await getCoreV1Api().readNamespacedPod({
@@ -167,7 +188,7 @@ export async function createPod(userId: string): Promise<void> {
               `--bind-addr=0.0.0.0:${CODE_SERVER_PORT}`,
               "--auth=none",
               "--disable-telemetry",
-              "/home/coder/project",
+              `/home/coder/ws-${resetCount}`,
             ],
             ports: [{ containerPort: CODE_SERVER_PORT }],
             env: [
@@ -185,7 +206,7 @@ export async function createPod(userId: string): Promise<void> {
               },
             },
             volumeMounts: [
-              { name: "workspace", mountPath: "/home/coder/project" },
+              { name: "workspace", mountPath: `/home/coder/ws-${resetCount}` },
             ],
             readinessProbe: {
               httpGet: { path: "/healthz", port: CODE_SERVER_PORT },
@@ -266,6 +287,7 @@ export async function deletePVC(userId: string): Promise<void> {
       name: pvc,
       namespace: NAMESPACE,
     });
+    await waitForPVCDeletion(pvc);
   } catch {
     // PVC may not exist
   }
