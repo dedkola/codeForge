@@ -253,8 +253,21 @@ export async function deletePod(userId: string): Promise<void> {
       name: pod,
       namespace: NAMESPACE,
     });
+    await waitForPodDeletion(pod);
   } catch {
     // pod may not exist
+  }
+}
+
+export async function deletePVC(userId: string): Promise<void> {
+  const { pvc } = resourceNames(userId);
+  try {
+    await getCoreV1Api().deleteNamespacedPersistentVolumeClaim({
+      name: pvc,
+      namespace: NAMESPACE,
+    });
+  } catch {
+    // PVC may not exist
   }
 }
 

@@ -42,4 +42,8 @@ export function getNetworkingV1Api(): k8s.NetworkingV1Api {
   return _networkingV1Api;
 }
 
-export const NAMESPACE = process.env.K8S_NAMESPACE;
+export const NAMESPACE: string = (() => {
+  const ns = process.env.K8S_NAMESPACE;
+  if (!ns) throw new Error("Missing required env var: K8S_NAMESPACE");
+  return ns;
+})();

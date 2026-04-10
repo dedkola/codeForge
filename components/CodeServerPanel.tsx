@@ -17,6 +17,7 @@ export default function CodeServerPanel({
   const [error, setError] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
   const [prevUrl, setPrevUrl] = useState(url);
+  const [resetting, setResetting] = useState(false);
 
   // Reset iframe state on url change (derived state pattern)
   if (codeServerUrl !== prevUrl) {
@@ -70,6 +71,38 @@ export default function CodeServerPanel({
       iframe.src = codeServerUrl ?? iframe.src;
     }
   }, [codeServerUrl]);
+
+  const handleReset = useCallback(async () => {
+    if (
+      !window.confirm(
+        "This will delete all your files and create a fresh workspace. Are you sure?",
+      )
+    )
+      return;
+
+    setResetting(true);
+    setLoaded(false);
+    setError(false);
+    setTimedOut(false);
+
+    try {
+      const res = await fetch("/api/code-server/reset", { method: "POST" });
+      const data = await res.json();
+      if (data.status === "ready" && data.url) {
+        setCodeServerUrl(data.url);
+        setStatus("ready");
+      } else if (data.status === "starting") {
+        setStatus("starting");
+        if (data.url) setCodeServerUrl(data.url);
+      } else {
+        setStatus("error");
+      }
+    } catch {
+      setStatus("error");
+    } finally {
+      setResetting(false);
+    }
+  }, []);
 
   // "Setting up workspace" state
   if (status === "starting") {
@@ -212,6 +245,32 @@ export default function CodeServerPanel({
         >
           ↗
         </a>
+
+        <button
+          title="Reset workspace — delete all files and start fresh"
+          disabled={resetting}
+          onClick={handleReset}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: resetting ? "not-allowed" : "pointer",
+            color: "var(--text-muted)",
+            fontSize: 12,
+            padding: "2px 6px",
+            borderRadius: "var(--radius-sm)",
+            transition: "color var(--transition-fast)",
+            opacity: resetting ? 0.5 : 1,
+          }}
+          onMouseEnter={(e) => {
+            if (!resetting)
+              e.currentTarget.style.color = "var(--accent-danger, #e53e3e)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = "var(--text-muted)";
+          }}
+        >
+          {resetting ? "⏳" : "⟲"}
+        </button>
       </div>
 
       {/* Loading overlay */}

@@ -5,6 +5,7 @@ import {
   createService,
   createIngress,
   deletePod,
+  deletePVC,
   deleteService,
   deleteIngress,
   getPodStatus,
@@ -119,4 +120,18 @@ export async function getUserCodeServerStatus(userId: string): Promise<{
   return {
     status: instance.status as "starting" | "stopped" | "error",
   };
+}
+
+export async function resetUserWorkspace(
+  userId: string,
+): Promise<EnsureResult> {
+  // Tear down everything including PVC (wipes user data)
+  await deletePod(userId);
+  await deleteService(userId);
+  await deleteIngress(userId);
+  await deletePVC(userId);
+  await updateStatus(userId, "stopped");
+
+  // Re-create from scratch — PVC will be fresh, entrypoint seeds the template
+  return ensureUserCodeServer(userId);
 }
