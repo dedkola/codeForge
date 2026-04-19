@@ -19,6 +19,11 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1"
   },
+  "pnpm": {
+    "overrides": {
+      "defu": "6.1.5"
+    }
+  },
   "devDependencies": {
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
