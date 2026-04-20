@@ -15,6 +15,7 @@ import { auth } from "@/lib/auth";
 import { ensureUserCodeServer } from "@/lib/code-server-manager";
 import { buildCodeServerUrl } from "@/lib/code-server-config";
 import { userSlug } from "@/lib/code-server-k8s";
+import { buildAuthPath } from "@/lib/safe-redirect";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -38,16 +39,20 @@ export async function generateMetadata({
 
 export default async function LessonPage({ params }: PageProps) {
   const { slug } = await params;
+  const lesson = getLessonBySlug(slug);
+
+  if (!lesson) {
+    notFound();
+  }
+
   const session = await auth.api.getSession({
     headers: await headers(),
   });
 
   if (!session) {
-    redirect(`/login?next=${encodeURIComponent(`/lessons/${slug}`)}`);
+    redirect(buildAuthPath("/login", `/lessons/${lesson.slug}`));
   }
 
-  const lesson = getLessonBySlug(slug);
-  if (!lesson) notFound();
   await connection(); // opt into dynamic rendering for k8s API calls
 
   const lessonTemplateSlug = getLessonTemplateSlug(lesson);

@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { buildAuthPath } from "@/lib/safe-redirect";
 
 export const metadata: Metadata = {
   title: "Lessons — CodeLearn",
@@ -18,7 +19,7 @@ export default async function LessonsPage() {
   });
 
   if (!session) {
-    redirect(`/login?next=${encodeURIComponent("/lessons")}`);
+    redirect(buildAuthPath("/login", "/lessons"));
   }
 
   return (

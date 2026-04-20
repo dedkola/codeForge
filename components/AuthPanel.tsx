@@ -4,6 +4,10 @@ import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
+import {
+  buildAuthPath,
+  sanitizeInternalRedirectPath,
+} from "@/lib/safe-redirect";
 
 type AuthMode = "login" | "signup";
 
@@ -23,7 +27,7 @@ export default function AuthPanel({ mode }: AuthPanelProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const nextUrl = useMemo(() => {
-    return searchParams.get("next") || "/lessons";
+    return sanitizeInternalRedirectPath(searchParams.get("next"));
   }, [searchParams]);
 
   const submitLabel = mode === "login" ? "Log In" : "Create Account";
@@ -277,16 +281,14 @@ export default function AuthPanel({ mode }: AuthPanelProps) {
                 {mode === "login" ? (
                   <>
                     No account yet?{" "}
-                    <Link href={`/signup?next=${encodeURIComponent(nextUrl)}`}>
+                    <Link href={buildAuthPath("/signup", nextUrl)}>
                       Create one
                     </Link>
                   </>
                 ) : (
                   <>
                     Already have an account?{" "}
-                    <Link href={`/login?next=${encodeURIComponent(nextUrl)}`}>
-                      Log in
-                    </Link>
+                    <Link href={buildAuthPath("/login", nextUrl)}>Log in</Link>
                   </>
                 )}
               </p>

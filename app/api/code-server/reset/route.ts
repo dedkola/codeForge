@@ -7,7 +7,7 @@ import { userSlug } from "@/lib/code-server-k8s";
 import { resolveLessonTemplateSlug } from "@/data/lessons";
 
 interface ResetRequestBody {
-  lessonSlug?: string;
+  lessonSlug?: unknown;
 }
 
 export async function POST(request: Request) {
@@ -23,7 +23,9 @@ export async function POST(request: Request) {
     // Allow empty body for backward compatibility
   }
 
-  const lessonTemplateSlug = resolveLessonTemplateSlug(body.lessonSlug);
+  const lessonSlug =
+    typeof body.lessonSlug === "string" ? body.lessonSlug : undefined;
+  const lessonTemplateSlug = resolveLessonTemplateSlug(lessonSlug);
 
   try {
     const result = await resetUserWorkspace(session.user.id);
