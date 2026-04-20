@@ -13,7 +13,6 @@
 k8s/base/                  core namespace + RBAC + cleanup + policy + limits
 k8s/overlays/prod/         base + wildcard TLS resources
 k8s/overlays/dev/          same layout as prod today
-k8s/optional/cloudflared/  optional in-cluster Cloudflare Tunnel deployment
 k8s/ssl/                   ClusterIssuer + wildcard Certificate
 ```
 
@@ -54,13 +53,6 @@ The CronJob depends on the `codeforge-secrets` Secret, so keep `CODEFORGE_APP_UR
 
 ```bash
 kubectl apply -k k8s
-```
-
-### Optional remote K8s API tunnel
-
-```bash
-kubectl apply -f k8s/cloudflared-secret.yaml
-kubectl apply -k k8s/optional/cloudflared
 ```
 
 ### Build the custom code-server image
@@ -115,8 +107,7 @@ Check that:
 ### Remote K8s API access fails
 
 ```bash
-kubectl get pods -n codelearn -l app=cloudflared
-kubectl logs -n codelearn -l app=cloudflared --tail=100
+curl -I https://k8s.tkweb.site
 ```
 
 Also verify:

@@ -48,21 +48,7 @@ ingress:
 
 `noTLSVerify: true` only applies to the local hop between cloudflared and the K3s API server because K3s normally serves a self-signed cert on port 6443.
 
-## Step 2 - Deploy the optional cloudflared workload in-cluster
-
-Copy the example secret, paste the tunnel token, and apply it:
-
-```bash
-cp k8s/cloudflared-secret.yaml.example k8s/cloudflared-secret.yaml
-kubectl apply -f k8s/cloudflared-secret.yaml
-kubectl apply -k k8s/optional/cloudflared
-```
-
-This deploys the `cloudflared` Deployment from `k8s/optional/cloudflared/deployment.yaml`.
-
-If you already run cloudflared elsewhere, you can skip this overlay entirely.
-
-## Step 3 - Create a ServiceAccount token for the app
+## Step 2 - Create a ServiceAccount token for the app
 
 Apply the main Kustomize stack if you have not already:
 
@@ -78,7 +64,7 @@ kubectl -n codelearn create token codeforge-sa --duration=8760h
 
 Use that value as `K8S_AUTH_TOKEN`.
 
-## Step 4 - Configure the app environment
+## Step 3 - Configure the app environment
 
 Set these in `.env.local` or in your deployment platform:
 
@@ -91,7 +77,7 @@ K8S_NAMESPACE=codelearn
 
 `K8S_SKIP_TLS_VERIFY=false` is correct when the public hostname terminates with a valid Cloudflare-served certificate.
 
-## Step 5 - Verify the tunnel
+## Step 4 - Verify the tunnel
 
 From a machine outside the cluster:
 
@@ -102,7 +88,7 @@ curl -s -H "Authorization: Bearer <TOKEN>" \
 
 If the token and tunnel are correct, you should get a JSON response.
 
-## Step 6 - Verify end-to-end from the app
+## Step 5 - Verify end-to-end from the app
 
 1. Start the app with `pnpm dev`
 2. Log in
@@ -113,8 +99,6 @@ If the token and tunnel are correct, you should get a JSON response.
 Useful commands:
 
 ```bash
-kubectl get pods -n codelearn -l app=cloudflared
-kubectl logs -n codelearn -l app=cloudflared --tail=100
 kubectl get pods -n codelearn -l app=code-server-user
 ```
 
@@ -124,6 +108,5 @@ kubectl get pods -n codelearn -l app=code-server-user
 | --- | --- |
 | `401 Unauthorized` from `k8s.tkweb.site` | Regenerate the `codeforge-sa` token |
 | `403 Forbidden` | Verify the `codeforge-sa` Role and RoleBinding in `k8s/base/rbac.yaml` |
-| Tunnel pod failing | Check `cloudflared-secret` and `kubectl logs -n codelearn -l app=cloudflared` |
 | App cannot reach K8s API | Verify `K8S_API_SERVER`, `K8S_AUTH_TOKEN`, and `K8S_SKIP_TLS_VERIFY=false` |
 | Workspace pods created but iframe fails | The issue is likely wildcard ingress/TLS, not the K8s API tunnel |

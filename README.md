@@ -30,8 +30,7 @@ Kubernetes (namespace: codelearn)
   ├── Traefik ingress controller
   ├── cert-manager ClusterIssuer + wildcard Certificate
   ├── RBAC for codeforge-sa
-  ├── Cleanup CronJob (calls /api/code-server/cleanup)
-  └── Optional cloudflared Deployment for remote K8s API access
+  └── Cleanup CronJob (calls /api/code-server/cleanup)
 ```
 
 Key runtime pieces:
@@ -130,7 +129,6 @@ The active Kustomize layout is:
 
 - `k8s/base` - namespace, RBAC, cleanup CronJob, network policy, limit range
 - `k8s/overlays/prod` - base + wildcard TLS manifests
-- `k8s/optional/cloudflared` - optional in-cluster Cloudflare Tunnel Deployment for remote K8s API access
 - `k8s` - root umbrella that points at `overlays/prod`
 
 Apply the main stack:
@@ -174,14 +172,6 @@ Expose the K3s API through Cloudflare Tunnel, then set:
 K8S_API_SERVER=https://k8s.tkweb.site
 K8S_AUTH_TOKEN=<token created below>
 K8S_SKIP_TLS_VERIFY=false
-```
-
-If you want the Cloudflare Tunnel to run inside the cluster, create the secret and apply the optional overlay:
-
-```bash
-cp k8s/cloudflared-secret.yaml.example k8s/cloudflared-secret.yaml
-kubectl apply -f k8s/cloudflared-secret.yaml
-kubectl apply -k k8s/optional/cloudflared
 ```
 
 For the full tunnel flow, see `docs/K3S-CLOUDFLARE-TUNNEL-API-ACCESS.md`.
