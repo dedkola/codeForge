@@ -6,8 +6,9 @@ This directory builds the image used by dynamic user workspace Pods.
 
 - Starts from `ghcr.io/coder/code-server`
 - Installs Node.js 20
-- Enables `pnpm`
+- Preinstalls `pnpm` globally
 - Builds an empty Next.js app into `/home/coder/template`
+- Uses App Router (`--app`) and tracks latest Next.js/React versions in template `package.json`
 - Skips dependency installation in the template (no preseeded `node_modules`)
 - Uses `entrypoint.sh` to seed new workspaces from that template
 

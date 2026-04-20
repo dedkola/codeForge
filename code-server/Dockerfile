@@ -2,11 +2,10 @@ FROM ghcr.io/coder/code-server:latest
 
 USER root
 
-# Install Node.js 20 + enable pnpm via corepack
+# Install Node.js 20 + preinstall pnpm globally (no first-run corepack prompt)
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
-    && corepack enable \
-    && corepack prepare pnpm@latest --activate \
+    && npm install -g pnpm@10.33.0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Scaffold an empty Next.js template at build time inside coder home
@@ -14,6 +13,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 RUN npx --yes create-next-app@latest /home/coder/template \
             --ts --eslint --app --src-dir --no-tailwind --empty \
             --import-alias "@/*" --use-pnpm --skip-install --yes \
+        && npm --prefix /home/coder/template pkg set \
+            "dependencies.next=latest" \
+            "dependencies.react=latest" \
+            "dependencies.react-dom=latest" \
+            "devDependencies.eslint-config-next=latest" \
         && rm -rf /home/coder/template/node_modules /home/coder/template/.next \
     && chown -R 1000:1000 /home/coder/template
 
