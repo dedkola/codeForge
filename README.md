@@ -120,14 +120,15 @@ See [`.env.example`](.env.example) for all available variables. Key groups:
 
 Centralized in `lib/code-server-config.ts`:
 
-| Variable                       | Default                             | Description                             |
-| ------------------------------ | ----------------------------------- | --------------------------------------- |
-| `CODE_SERVER_DOMAIN`           | `codelearn.tkweb.site`              | Wildcard domain for per-user subdomains |
-| `CODE_SERVER_IMAGE`            | `ghcr.io/coder/code-server:4.105.2` | Container image                         |
-| `CODE_SERVER_STORAGE_CLASS`    | `local-path`                        | PVC storage class                       |
-| `CODE_SERVER_PVC_SIZE`         | `1Gi`                               | Workspace storage size                  |
-| `CODE_SERVER_MAX_IDLE_MINUTES` | `120`                               | Idle timeout before cleanup             |
-| `CODE_SERVER_TLS_SECRET`       | `wildcard-codelearn-tls`            | K8s TLS secret name                     |
+| Variable                        | Default                             | Description                                          |
+| ------------------------------- | ----------------------------------- | ---------------------------------------------------- |
+| `CODE_SERVER_DOMAIN`            | `codelearn.tkweb.site`              | Wildcard domain for per-user subdomains              |
+| `CODE_SERVER_IMAGE`             | `ghcr.io/coder/code-server:4.105.2` | Container image                                      |
+| `CODE_SERVER_IMAGE_PULL_SECRET` | _(empty)_                           | Optional imagePullSecret name for private registries |
+| `CODE_SERVER_STORAGE_CLASS`     | `local-path`                        | PVC storage class                                    |
+| `CODE_SERVER_PVC_SIZE`          | `1Gi`                               | Workspace storage size                               |
+| `CODE_SERVER_MAX_IDLE_MINUTES`  | `120`                               | Idle timeout before cleanup                          |
+| `CODE_SERVER_TLS_SECRET`        | `wildcard-codelearn-tls`            | K8s TLS secret name                                  |
 
 ## Build
 

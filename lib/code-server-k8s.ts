@@ -6,6 +6,7 @@ import {
   CODE_SERVER_CPU_LIMIT,
   CODE_SERVER_CPU_REQUEST,
   CODE_SERVER_IMAGE,
+  CODE_SERVER_IMAGE_PULL_SECRET,
   CODE_SERVER_INGRESS_CLASS,
   CODE_SERVER_MEMORY_LIMIT,
   CODE_SERVER_MEMORY_REQUEST,
@@ -183,6 +184,15 @@ export async function createPod(
         labels: userResourceLabels(slug),
       },
       spec: {
+        ...(CODE_SERVER_IMAGE_PULL_SECRET
+          ? {
+              imagePullSecrets: [
+                {
+                  name: CODE_SERVER_IMAGE_PULL_SECRET,
+                },
+              ],
+            }
+          : {}),
         containers: [
           {
             name: "code-server",

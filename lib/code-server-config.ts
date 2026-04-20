@@ -13,7 +13,15 @@ function requirePositiveInt(name: string): number {
   return parsed;
 }
 
+function optionalEnv(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  return value ? value : undefined;
+}
+
 export const CODE_SERVER_IMAGE = requireEnv("CODE_SERVER_IMAGE");
+export const CODE_SERVER_IMAGE_PULL_SECRET = optionalEnv(
+  "CODE_SERVER_IMAGE_PULL_SECRET",
+);
 export const CODE_SERVER_STORAGE_CLASS = requireEnv(
   "CODE_SERVER_STORAGE_CLASS",
 );
