@@ -43,13 +43,40 @@ export const CODE_SERVER_CLEANUP_SECRET = requireEnv(
   "CODE_SERVER_CLEANUP_SECRET",
 );
 
+const LESSON_SLUG_RE = /^[a-z0-9-]+$/;
+
 export function buildCodeServerHost(slug: string): string {
   return `${slug}.${CODE_SERVER_DOMAIN}`;
+}
+
+function normalizeLessonSlug(lessonSlug?: string): string | undefined {
+  if (!lessonSlug) return undefined;
+  if (!LESSON_SLUG_RE.test(lessonSlug)) return undefined;
+  return lessonSlug;
+}
+
+export function buildWorkspaceFolder(
+  resetCount: number = 0,
+  lessonSlug?: string,
+): string {
+  const workspaceRoot = `/home/coder/ws-${resetCount}`;
+  const normalizedLessonSlug = normalizeLessonSlug(lessonSlug);
+
+  if (!normalizedLessonSlug) {
+    return workspaceRoot;
+  }
+
+  return `${workspaceRoot}/lessons/${normalizedLessonSlug}`;
 }
 
 export function buildCodeServerUrl(
   slug: string,
   resetCount: number = 0,
+  lessonSlug?: string,
 ): string {
-  return `https://${buildCodeServerHost(slug)}/?folder=/home/coder/ws-${resetCount}`;
+  const params = new URLSearchParams({
+    folder: buildWorkspaceFolder(resetCount, lessonSlug),
+  });
+
+  return `https://${buildCodeServerHost(slug)}/?${params.toString()}`;
 }

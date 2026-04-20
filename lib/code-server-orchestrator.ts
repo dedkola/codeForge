@@ -28,6 +28,7 @@ import {
 export interface EnsureResult {
   status: "ready" | "starting" | "error";
   url: string;
+  resetCount: number;
 }
 
 export async function ensureUserCodeServer(
@@ -45,7 +46,7 @@ export async function ensureUserCodeServer(
       // Ensure ingress exists even if pod is already running
       await createIngress(userId);
       await touchLastActive(userId);
-      return { status: "ready", url };
+      return { status: "ready", url, resetCount };
     }
     await updateStatus(userId, "pending");
   }
@@ -62,7 +63,7 @@ export async function ensureUserCodeServer(
     );
     await upsertInstance(userId, pod, svc, pvc);
     await updateStatus(userId, "error");
-    return { status: "error", url };
+    return { status: "error", url, resetCount };
   }
 
   await upsertInstance(userId, pod, svc, pvc);
@@ -70,11 +71,11 @@ export async function ensureUserCodeServer(
   const ready = await waitForPodReady(userId, CODE_SERVER_POD_READY_TIMEOUT_MS);
   if (ready) {
     await updateStatus(userId, "running");
-    return { status: "ready", url };
+    return { status: "ready", url, resetCount };
   }
 
   await updateStatus(userId, "pending");
-  return { status: "starting", url };
+  return { status: "starting", url, resetCount };
 }
 
 export async function stopUserCodeServer(userId: string): Promise<void> {

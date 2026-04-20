@@ -12,6 +12,7 @@ export interface Lesson {
   difficulty: "Beginner" | "Intermediate" | "Advanced";
   duration: string;
   tags: string[];
+  starterTemplate?: string;
   steps: LessonStep[];
 }
 
@@ -448,3 +449,22 @@ kubectl rollout status deployment/my-app
 export function getLessonBySlug(slug: string): Lesson | undefined {
   return lessons.find((l) => l.slug === slug);
 }
+
+export function getLessonTemplateSlug(lesson: Lesson): string {
+  return lesson.starterTemplate ?? lesson.slug;
+}
+
+export function resolveLessonTemplateSlug(
+  lessonSlug: string | null | undefined,
+): string | undefined {
+  if (!lessonSlug) return undefined;
+
+  const lesson = getLessonBySlug(lessonSlug);
+  if (!lesson) return undefined;
+
+  return getLessonTemplateSlug(lesson);
+}
+
+export const lessonTemplateSlugs = Array.from(
+  new Set(lessons.map(getLessonTemplateSlug)),
+);

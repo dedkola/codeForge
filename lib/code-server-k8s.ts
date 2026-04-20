@@ -14,6 +14,9 @@ import {
   CODE_SERVER_STORAGE_CLASS,
   CODE_SERVER_TLS_SECRET,
 } from "./code-server-config";
+import { lessonTemplateSlugs } from "@/data/lessons";
+
+const LESSON_TEMPLATE_SLUGS = lessonTemplateSlugs.join(",");
 
 /** Produce a K8s-safe slug from a user ID (lowercase hex, 32 chars / 128 bits). */
 export function userSlug(userId: string): string {
@@ -195,6 +198,7 @@ export async function createPod(
               { name: "HOME", value: "/home/coder" },
               { name: "CS_DISABLE_IFRAME_PROTECTION", value: "true" },
               { name: "WORKSPACE", value: `/home/coder/ws-${resetCount}` },
+              { name: "LESSON_TEMPLATE_SLUGS", value: LESSON_TEMPLATE_SLUGS },
             ],
             resources: {
               requests: {

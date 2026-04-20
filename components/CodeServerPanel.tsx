@@ -5,27 +5,31 @@ import { useState, useEffect, useCallback } from "react";
 interface CodeServerPanelProps {
   url: string | undefined;
   instanceStatus: "ready" | "starting" | "error";
+  lessonSlug: string;
 }
 
 export default function CodeServerPanel({
   url,
   instanceStatus,
+  lessonSlug,
 }: CodeServerPanelProps) {
   const [codeServerUrl, setCodeServerUrl] = useState(url);
   const [status, setStatus] = useState(instanceStatus);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
-  const [prevUrl, setPrevUrl] = useState(url);
   const [resetting, setResetting] = useState(false);
 
-  // Reset iframe state on url change (derived state pattern)
-  if (codeServerUrl !== prevUrl) {
-    setPrevUrl(codeServerUrl);
+  useEffect(() => {
+    setCodeServerUrl(url);
+    setStatus(instanceStatus);
+  }, [url, instanceStatus, lessonSlug]);
+
+  useEffect(() => {
     setLoaded(false);
     setError(false);
     setTimedOut(false);
-  }
+  }, [codeServerUrl]);
 
   // Poll for readiness when workspace is starting
   useEffect(() => {
@@ -33,7 +37,9 @@ export default function CodeServerPanel({
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch("/api/code-server/status");
+        const res = await fetch(
+          `/api/code-server/status?lesson=${encodeURIComponent(lessonSlug)}`,
+        );
         const data = await res.json();
         if (data.status === "ready" && data.url) {
           setCodeServerUrl(data.url);
@@ -47,7 +53,7 @@ export default function CodeServerPanel({
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [status]);
+  }, [status, lessonSlug]);
 
   // Iframe timeout fallback
   useEffect(() => {
@@ -86,7 +92,13 @@ export default function CodeServerPanel({
     setTimedOut(false);
 
     try {
-      const res = await fetch("/api/code-server/reset", { method: "POST" });
+      const res = await fetch("/api/code-server/reset", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ lessonSlug }),
+      });
       const data = await res.json();
       if (data.status === "ready" && data.url) {
         setCodeServerUrl(data.url);
@@ -102,7 +114,7 @@ export default function CodeServerPanel({
     } finally {
       setResetting(false);
     }
-  }, []);
+  }, [lessonSlug]);
 
   // "Setting up workspace" state
   if (status === "starting") {
