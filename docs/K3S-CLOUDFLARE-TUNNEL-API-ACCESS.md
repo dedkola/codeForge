@@ -1,257 +1,129 @@
 # K3s API Access via Cloudflare Tunnel
 
-Expose your K3s API server through a Cloudflare Tunnel so that CodeForge (hosted on Vercel, a VPS, or any external machine) can manage code-server pods remotely.
+Use this when the Next.js app runs outside the cluster and still needs to create per-user workspace resources through the Kubernetes API.
 
-## Overview
+This tunnel is only for the Kubernetes API. User workspaces still load through the wildcard Traefik ingress on `*.codelearn.tkweb.site`.
+
+## What this solves
 
 ```text
-CodeForge (Vercel / VPS)            Cloudflare Edge            K3s Node
-  │                                     │                        │
-  │  K8S_API_SERVER=                    │                        │
-  │  https://k8s.tkweb.site            │                        │
-  │  ─────────────────────────────────► │                        │
-  │                                     │  cloudflared tunnel    │
-  │                                     │  ──────────────────►   │
-  │                                     │     localhost:6443     │
-  │                                     │                        │
-  │  ◄───────── K8s API response ────── │ ◄───────────────────── │
+External app (local / Vercel / VPS)
+  -> https://k8s.tkweb.site
+  -> Cloudflare Tunnel
+  -> K3s API on localhost:6443
+
+Browser iframe
+  -> https://<slug>.codelearn.tkweb.site
+  -> Traefik Ingress
+  -> per-user code-server Service
 ```
-
-The tunnel lets you avoid opening port 6443 to the internet. All traffic is encrypted end-to-end through Cloudflare's network.
-
----
 
 ## Prerequisites
 
-- A K3s cluster already running (single node is fine)
-- A Cloudflare account with your domain (`tkweb.site`) added
-- `cloudflared` installed on the K3s node
-- `kubectl` access to the cluster (SSH or local)
+- K3s cluster running
+- `kubectl` access to the cluster
+- Cloudflare account for the domain
+- Wildcard workspace domain already set up for `*.codelearn.tkweb.site`
 
----
+## Step 1 - Create the tunnel in Cloudflare
 
-## Step 1 — Authenticate cloudflared
+Create a tunnel that forwards:
 
-On the K3s node:
+- hostname: `k8s.tkweb.site`
+- service: `https://localhost:6443`
 
-```bash
-cloudflared tunnel login
-```
-
-This opens a browser. Select your domain (`tkweb.site`). A certificate is saved to `~/.cloudflared/cert.pem`.
-
----
-
-## Step 2 — Create the tunnel
-
-```bash
-cloudflared tunnel create k3s-api
-```
-
-This generates a tunnel ID and a credentials file at:
-
-```text
-~/.cloudflared/<TUNNEL_ID>.json
-```
-
-Note the **tunnel ID** — you'll need it in the next steps.
-
----
-
-## Step 3 — Configure the tunnel
-
-Create (or edit) `~/.cloudflared/config.yml`:
+If you prefer the CLI flow, the equivalent local config is:
 
 ```yaml
 tunnel: <TUNNEL_ID>
 credentials-file: /root/.cloudflared/<TUNNEL_ID>.json
 
 ingress:
-  # K8s API server
   - hostname: k8s.tkweb.site
     service: https://localhost:6443
     originRequest:
-      noTLSVerify: true # K3s uses a self-signed cert on 6443
-
-  # Catch-all (required by cloudflared)
+      noTLSVerify: true
   - service: http_status:404
 ```
 
-> **Note**: `noTLSVerify: true` tells cloudflared to accept the K3s self-signed certificate on the local connection. The traffic between Cloudflare edge and the client is still TLS-encrypted.
+`noTLSVerify: true` only applies to the local hop between cloudflared and the K3s API server because K3s normally serves a self-signed cert on port 6443.
 
----
+## Step 2 - Deploy the optional cloudflared workload in-cluster
 
-## Step 4 — Create a DNS record for the tunnel
-
-```bash
-cloudflared tunnel route dns k3s-api k8s.tkweb.site
-```
-
-This creates a CNAME record `k8s.tkweb.site → <TUNNEL_ID>.cfargotunnel.com` in Cloudflare DNS.
-
----
-
-## Step 5 — Run the tunnel
-
-**Quick test:**
+Copy the example secret, paste the tunnel token, and apply it:
 
 ```bash
-cloudflared tunnel run k3s-api
+cp k8s/cloudflared-secret.yaml.example k8s/cloudflared-secret.yaml
+kubectl apply -f k8s/cloudflared-secret.yaml
+kubectl apply -k k8s/optional/cloudflared
 ```
 
-**As a systemd service (production):**
+This deploys the `cloudflared` Deployment from `k8s/optional/cloudflared/deployment.yaml`.
+
+If you already run cloudflared elsewhere, you can skip this overlay entirely.
+
+## Step 3 - Create a ServiceAccount token for the app
+
+Apply the main Kustomize stack if you have not already:
 
 ```bash
-sudo cloudflared service install
-sudo systemctl enable cloudflared
-sudo systemctl start cloudflared
+kubectl apply -k k8s
 ```
 
-Verify the tunnel is online:
-
-```bash
-cloudflared tunnel info k3s-api
-```
-
----
-
-## Step 6 — Create a ServiceAccount token for CodeForge
-
-On the K3s node (or anywhere with kubectl access), apply the CodeForge RBAC that already exists in the repo:
-
-```bash
-kubectl apply -k k8s/
-```
-
-This creates the `codeforge-sa` ServiceAccount in the `codelearn` namespace with permissions to manage pods, services, and PVCs.
-
-Now create a long-lived token for the ServiceAccount:
+Then create a token for `codeforge-sa`:
 
 ```bash
 kubectl -n codelearn create token codeforge-sa --duration=8760h
 ```
 
-This gives you a JWT valid for 1 year. Copy it — this is your `K8S_AUTH_TOKEN`.
+Use that value as `K8S_AUTH_TOKEN`.
 
-> **Alternative — non-expiring Secret-bound token** (if your cluster supports it):
->
-> ```yaml
-> apiVersion: v1
-> kind: Secret
-> metadata:
->   name: codeforge-sa-token
->   namespace: codelearn
->   annotations:
->     kubernetes.io/service-account.name: codeforge-sa
-> type: kubernetes.io/service-account-token
-> ```
->
-> ```bash
-> kubectl apply -f - <<EOF
-> apiVersion: v1
-> kind: Secret
-> metadata:
->   name: codeforge-sa-token
->   namespace: codelearn
->   annotations:
->     kubernetes.io/service-account.name: codeforge-sa
-> type: kubernetes.io/service-account-token
-> EOF
->
-> kubectl -n codelearn get secret codeforge-sa-token -o jsonpath='{.data.token}' | base64 -d
-> ```
+## Step 4 - Configure the app environment
 
----
+Set these in `.env.local` or in your deployment platform:
 
-## Step 7 — Verify API access through the tunnel
+```bash
+K8S_API_SERVER=https://k8s.tkweb.site
+K8S_AUTH_TOKEN=<service-account-token>
+K8S_SKIP_TLS_VERIFY=false
+K8S_NAMESPACE=codelearn
+```
 
-From any external machine:
+`K8S_SKIP_TLS_VERIFY=false` is correct when the public hostname terminates with a valid Cloudflare-served certificate.
+
+## Step 5 - Verify the tunnel
+
+From a machine outside the cluster:
 
 ```bash
 curl -s -H "Authorization: Bearer <TOKEN>" \
   https://k8s.tkweb.site/api/v1/namespaces/codelearn/pods | head -20
 ```
 
-You should get a JSON response listing pods in the `codelearn` namespace (empty list is fine).
+If the token and tunnel are correct, you should get a JSON response.
 
-If you get a 403 — the token works but RBAC blocks the request (check Role/RoleBinding).
-If you get a connection error — the tunnel isn't running or DNS hasn't propagated.
+## Step 6 - Verify end-to-end from the app
 
----
+1. Start the app with `pnpm dev`
+2. Log in
+3. Open a lesson
+4. Confirm a `cs-<slug>` Pod is created in `codelearn`
+5. Confirm the iframe opens `https://<slug>.codelearn.tkweb.site`
 
-## Step 8 — Configure CodeForge environment
-
-In your `.env.local` (or Vercel environment variables):
+Useful commands:
 
 ```bash
-K8S_API_SERVER=https://k8s.tkweb.site
-K8S_AUTH_TOKEN=<the token from Step 6>
-K8S_SKIP_TLS_VERIFY=false
-K8S_NAMESPACE=codelearn
+kubectl get pods -n codelearn -l app=cloudflared
+kubectl logs -n codelearn -l app=cloudflared --tail=100
+kubectl get pods -n codelearn -l app=code-server-user
 ```
-
-`K8S_SKIP_TLS_VERIFY=false` is correct here — Cloudflare Tunnel provides a valid TLS certificate for `k8s.tkweb.site`, so there's no need to skip verification.
-
-How this maps to `lib/k8s.ts`:
-
-```typescript
-// When K8S_API_SERVER + K8S_AUTH_TOKEN are set, the client connects via:
-kc.loadFromOptions({
-  clusters: [
-    { name: "remote", server: "https://k8s.tkweb.site", skipTLSVerify: false },
-  ],
-  users: [{ name: "token-user", token: "<TOKEN>" }],
-  contexts: [{ name: "remote-ctx", cluster: "remote", user: "token-user" }],
-  currentContext: "remote-ctx",
-});
-```
-
----
-
-## Step 9 — Test end-to-end
-
-1. Start CodeForge locally: `pnpm dev`
-2. Log in and open a lesson
-3. Click "Start" — the API creates pod/service/ingress in K3s through the API tunnel
-4. The iframe loads `https://<slug>.cs.tkweb.site` through nginx ingress with your cert-manager wildcard TLS certificate
-
----
-
-## Security considerations
-
-| Concern                     | Mitigation                                                                                                        |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| K8s API exposed to internet | Protected by ServiceAccount token (bearer auth). No anonymous access.                                             |
-| Token theft                 | Store token in Vercel encrypted env vars or a secrets manager. Rotate annually.                                   |
-| Tunnel compromise           | cloudflared uses outbound-only connections — no open inbound ports on K3s node.                                   |
-| RBAC scope                  | `codeforge-sa` is scoped to `codelearn` namespace only. Cannot access other namespaces or cluster-wide resources. |
-| Brute force                 | Cloudflare rate-limiting + WAF can be enabled on `k8s.tkweb.site` for extra protection.                           |
-| Code-server ingress         | Pods run `--auth=none`; restrict ingress to controller namespaces only and enforce TLS redirect on nginx ingress. |
-
----
 
 ## Troubleshooting
 
-| Problem                              | Fix                                                                                                                 |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `connection refused` from CodeForge  | Tunnel not running. Check `kubectl get pods -n codelearn -l app=cloudflared`.                                       |
-| `401 Unauthorized`                   | Token expired or invalid. Regenerate with `kubectl create token`.                                                   |
-| `403 Forbidden`                      | RBAC issue. Verify the Role has the right verbs/resources and the RoleBinding matches.                              |
-| DNS not resolving                    | Run `cloudflared tunnel route dns k3s-api k8s.tkweb.site` again. Check Cloudflare DNS dashboard.                    |
-| Tunnel shows "inactive"              | Check cloudflared pod logs: `kubectl logs -n codelearn -l app=cloudflared`.                                         |
-| Pods created but iframe doesn't load | Check wildcard DNS (`*.cs.tkweb.site`) points to ingress, certificate is Ready, and ingress uses `wildcard-cs-tls`. |
-
----
-
-## Architecture summary
-
-Cloudflare Tunnel is used only for Kubernetes API connectivity; user workspaces are served by nginx ingress:
-
-1. **K8s API** (`k8s.tkweb.site`): CodeForge → Cloudflare Tunnel → K3s API server (port 6443)
-2. **Code-server** (`<slug>.cs.tkweb.site`): Browser iframe → nginx ingress → per-user code-server service
-
-TLS for user workspaces is managed by cert-manager (`ClusterIssuer` + wildcard `Certificate`) and terminated by nginx ingress using `wildcard-cs-tls`.
-
-For full deployment and verification steps in the `codelearn` namespace, continue with:
-
-- [K3s codelearn next steps (nginx + wildcard SSL)](./K3S-CODELEARN-NGINX-SSL-NEXT-STEPS.md)
+| Problem | Check |
+| --- | --- |
+| `401 Unauthorized` from `k8s.tkweb.site` | Regenerate the `codeforge-sa` token |
+| `403 Forbidden` | Verify the `codeforge-sa` Role and RoleBinding in `k8s/base/rbac.yaml` |
+| Tunnel pod failing | Check `cloudflared-secret` and `kubectl logs -n codelearn -l app=cloudflared` |
+| App cannot reach K8s API | Verify `K8S_API_SERVER`, `K8S_AUTH_TOKEN`, and `K8S_SKIP_TLS_VERIFY=false` |
+| Workspace pods created but iframe fails | The issue is likely wildcard ingress/TLS, not the K8s API tunnel |

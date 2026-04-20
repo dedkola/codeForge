@@ -29,5 +29,8 @@ jobs:
       - name: Validate dev overlay
         run: kubectl kustomize k8s/overlays/dev > /tmp/kustomize-dev.yaml
 
+      - name: Validate optional cloudflared overlay
+        run: kubectl kustomize k8s/optional/cloudflared > /tmp/kustomize-cloudflared.yaml
+
       - name: Validate root umbrella
         run: kubectl kustomize k8s > /tmp/kustomize-root.yaml

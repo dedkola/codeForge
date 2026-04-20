@@ -18,429 +18,354 @@ export interface Lesson {
 
 export const lessons: Lesson[] = [
   {
-    slug: "intro-to-git",
-    title: "Git Fundamentals",
+    slug: "layout-sidebar-header-footer",
+    title: "Build a Basic App Layout",
     description:
-      "Learn the core Git workflow — init, stage, commit, branch, and merge — hands-on in a live terminal.",
-    icon: "🌿",
+      "Create a clean page layout with a left sidebar, top header, content area, and footer.",
+    icon: "🧱",
     difficulty: "Beginner",
-    duration: "25 min",
-    tags: ["git", "version-control"],
+    duration: "20 min",
+    tags: ["layout", "css", "nextjs"],
     steps: [
       {
-        id: "what-is-git",
-        title: "What is Git?",
-        content: `## What is Git?
+        id: "layout-goal",
+        title: "Create the Page Structure",
+        content: `## Goal
 
-Git is a **distributed version control system** that tracks changes in your source code during software development. It was created by Linus Torvalds in 2005.
+Build a page with this structure:
 
-### Why use Git?
+- Left sidebar
+- Top header
+- Main content
+- Footer
 
-- **History** — every change is recorded, so you can go back in time
-- **Collaboration** — multiple people can work on the same codebase safely
-- **Branching** — experiment freely without breaking the main code
+### Edit \`src/app/page.tsx\`
 
-> 💡 Git stores data as **snapshots** of your project, not as file diffs.
+\`\`\`tsx
+export default function Home() {
+  return (
+    <div className="app-shell">
+      <aside className="app-sidebar">Sidebar</aside>
 
-### Key concepts
-
-| Term | Meaning |
-|------|---------|
-| Repository (repo) | A project folder tracked by Git |
-| Commit | A saved snapshot of your changes |
-| Branch | An independent line of development |
-| Remote | A copy of the repo hosted elsewhere (GitHub, GitLab…) |
-
-In the editor on the right, open a terminal (\`Ctrl+\`\`\` in VS Code) and run:
-
-\`\`\`bash
-git --version
+      <div className="app-main-wrap">
+        <header className="app-header">Header</header>
+        <main className="app-main">Main content</main>
+        <footer className="app-footer">Footer</footer>
+      </div>
+    </div>
+  );
+}
 \`\`\`
 
-You should see something like \`git version 2.x.x\`.`,
+Keep semantic HTML tags: \`aside\`, \`header\`, \`main\`, and \`footer\`.`,
       },
       {
-        id: "init-repo",
-        title: "Initialize a Repository",
-        content: `## Initializing a Git Repository
+        id: "layout-style",
+        title: "Add Layout CSS",
+        content: `## Style the Layout
 
-Let's create your first Git repo.
+### Edit \`src/app/globals.css\`
 
-### Step 1 — Create a project folder
+\`\`\`css
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  background: #f6f7fb;
+}
 
-In the terminal on the right:
+.app-sidebar {
+  background: #0f172a;
+  color: #e5e7eb;
+  padding: 20px;
+}
 
-\`\`\`bash
-mkdir my-project && cd my-project
+.app-main-wrap {
+  display: grid;
+  grid-template-rows: 64px 1fr 56px;
+  min-height: 100vh;
+}
+
+.app-header,
+.app-footer {
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+}
+
+.app-footer {
+  border-top: 1px solid #e5e7eb;
+  border-bottom: none;
+}
+
+.app-main {
+  padding: 24px;
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .app-sidebar {
+    min-height: 72px;
+  }
+}
 \`\`\`
 
-### Step 2 — Initialize Git
-
-\`\`\`bash
-git init
-\`\`\`
-
-Git creates a hidden \`.git\` folder. This is the "brain" of your repo — never delete it manually.
-
-### Step 3 — Check the status
-
-\`\`\`bash
-git status
-\`\`\`
-
-You'll see:
-
-\`\`\`
-On branch main
-No commits yet
-nothing to commit (create/copy files and use "git add" to track)
-\`\`\`
-
-> 💡 \`git status\` is your best friend. Run it constantly.`,
+This makes the layout responsive and clean on desktop and mobile.`,
       },
       {
-        id: "stage-commit",
-        title: "Stage & Commit",
-        content: `## Staging and Committing
+        id: "layout-check",
+        title: "Polish the UI",
+        content: `## Final Touches
 
-The Git workflow has two steps: **stage** then **commit**.
+Try these improvements:
 
-\`\`\`
-Working Directory → Staging Area → Repository
-     (edit)             (add)        (commit)
-\`\`\`
+- Add links and icons in the sidebar.
+- Add a page title in the header.
+- Add spacing and typography in main content.
 
-### Create a file
+### Quick check list
 
-\`\`\`bash
-echo "# My Project" > README.md
-\`\`\`
+- Sidebar stays on the left on desktop
+- Header and footer are visible
+- Main content stretches between header and footer
+- Mobile layout stacks cleanly
 
-### Stage it
-
-\`\`\`bash
-git add README.md
-# or stage everything:
-git add .
-\`\`\`
-
-### Commit it
-
-\`\`\`bash
-git commit -m "Initial commit: add README"
-\`\`\`
-
-### View the log
-
-\`\`\`bash
-git log --oneline
-\`\`\`
-
-You'll see your commit hash and message. 🎉`,
-      },
-      {
-        id: "branching",
-        title: "Branching",
-        content: `## Working with Branches
-
-Branches let you develop features in isolation.
-
-### Create a branch
-
-\`\`\`bash
-git checkout -b feature/hello-world
-\`\`\`
-
-### Make changes
-
-\`\`\`bash
-echo 'print("Hello, World!")' > hello.py
-git add hello.py
-git commit -m "Add hello world script"
-\`\`\`
-
-### Switch back to main
-
-\`\`\`bash
-git checkout main
-\`\`\`
-
-Notice \`hello.py\` is gone — it lives only on the feature branch!
-
-### Merge the branch
-
-\`\`\`bash
-git merge feature/hello-world
-\`\`\`
-
-Now your change is in \`main\`. ✅
-
-### Clean up
-
-\`\`\`bash
-git branch -d feature/hello-world
-\`\`\``,
+Once done, you have a reusable app shell for future pages.`,
       },
     ],
   },
   {
-    slug: "docker-basics",
-    title: "Docker Essentials",
+    slug: "hero-banner-image",
+    title: "Create a Hero Banner",
     description:
-      "Containerize your first application — write a Dockerfile, build an image, and run containers like a pro.",
-    icon: "🐳",
+      "Build a simple hero section with a headline, call-to-action button, and image.",
+    icon: "🖼️",
+    difficulty: "Beginner",
+    duration: "18 min",
+    tags: ["hero", "image", "ui"],
+    steps: [
+      {
+        id: "hero-structure",
+        title: "Build the Hero Markup",
+        content: `## Hero Layout Goal
+
+Create a two-column hero:
+
+- Left: text + button
+- Right: image
+
+### Edit \`src/app/page.tsx\`
+
+\`\`\`tsx
+import Image from "next/image";
+
+export default function Home() {
+  return (
+    <section className="hero">
+      <div className="hero-copy">
+        <p className="hero-kicker">New course</p>
+        <h1>Build UI Faster With Reusable Components</h1>
+        <p>
+          Learn practical frontend patterns by building small, focused blocks.
+        </p>
+        <button>Start lesson</button>
+      </div>
+
+      <div className="hero-media">
+        <Image
+          src="/next.svg"
+          alt="Hero visual"
+          width={540}
+          height={320}
+          priority
+        />
+      </div>
+    </section>
+  );
+}
+\`\`\`
+
+You can replace \`/next.svg\` with your own image in \`public/\`.`,
+      },
+      {
+        id: "hero-style",
+        title: "Style the Hero Section",
+        content: `## Add Hero CSS
+
+### Edit \`src/app/globals.css\`
+
+\`\`\`css
+.hero {
+  min-height: 100vh;
+  padding: 48px 24px;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 32px;
+  align-items: center;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+}
+
+.hero-copy h1 {
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  line-height: 1.05;
+  margin: 10px 0 14px;
+}
+
+.hero-copy p {
+  color: #475569;
+  max-width: 48ch;
+}
+
+.hero-kicker {
+  font-weight: 700;
+  color: #1d4ed8;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.hero-copy button {
+  margin-top: 20px;
+  background: #0f172a;
+  color: #fff;
+  border: 0;
+  border-radius: 10px;
+  padding: 12px 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hero-media {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 20px;
+}
+
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+}
+\`\`\`
+
+The hero should feel balanced on desktop and stacked on mobile.`,
+      },
+      {
+        id: "hero-extend",
+        title: "Make It Your Own",
+        content: `## Optional Improvements
+
+Try one or two upgrades:
+
+- Add a secondary button ("View examples").
+- Add rounded corners and subtle shadow to the image card.
+- Swap to your own image from \`public/\`.
+
+If your hero communicates one clear message and CTA, this lesson is complete.`,
+      },
+    ],
+  },
+  {
+    slug: "tailwind-header-menu",
+    title: "Build a Header Menu with Tailwind",
+    description:
+      "Install Tailwind CSS and create a clean, responsive top navigation menu.",
+    icon: "🧭",
     difficulty: "Intermediate",
-    duration: "35 min",
-    tags: ["docker", "containers", "devops"],
+    duration: "22 min",
+    tags: ["tailwind", "header", "navigation"],
     steps: [
       {
-        id: "what-is-docker",
-        title: "What is Docker?",
-        content: `## What is Docker?
+        id: "tailwind-setup",
+        title: "Install Tailwind",
+        content: `## Install Tailwind in the Lesson Project
 
-Docker is a platform for building and running **containers** — lightweight, portable units that package your app with all its dependencies.
-
-### Containers vs VMs
-
-| | Containers | Virtual Machines |
-|---|---|---|
-| Startup | Milliseconds | Minutes |
-| Size | MBs | GBs |
-| Isolation | Process-level | Full OS |
-| Performance | Near-native | Overhead |
-
-### Key terminology
-
-- **Image** — a read-only blueprint (like a class)
-- **Container** — a running instance of an image (like an object)
-- **Dockerfile** — a recipe that builds an image
-- **Registry** — a store for images (Docker Hub, GHCR…)
-
-Verify Docker is running:
+Run in your workspace terminal:
 
 \`\`\`bash
-docker info
-docker run hello-world
-\`\`\``,
-      },
-      {
-        id: "write-dockerfile",
-        title: "Write a Dockerfile",
-        content: `## Writing your first Dockerfile
-
-Let's containerize a simple Python web app.
-
-### Create the app
-
-\`\`\`bash
-mkdir docker-app && cd docker-app
-cat > app.py << 'EOF'
-from http.server import HTTPServer, BaseHTTPRequestHandler
-
-class Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Hello from Docker! 🐳")
-
-HTTPServer(("", 8080), Handler).serve_forever()
-EOF
+pnpm add -D tailwindcss @tailwindcss/postcss postcss
 \`\`\`
 
-### Write the Dockerfile
+Update \`postcss.config.mjs\`:
 
-\`\`\`bash
-cat > Dockerfile << 'EOF'
-FROM python:3.12-slim
-
-WORKDIR /app
-COPY app.py .
-
-EXPOSE 8080
-CMD ["python", "app.py"]
-EOF
-\`\`\`
-
-### Build the image
-
-\`\`\`bash
-docker build -t my-app:latest .
-\`\`\``,
-      },
-      {
-        id: "run-container",
-        title: "Run a Container",
-        content: `## Running Containers
-
-### Start your container
-
-\`\`\`bash
-docker run -d -p 8080:8080 --name my-app my-app:latest
-\`\`\`
-
-Flags explained:
-- \`-d\` — detached (background) mode
-- \`-p 8080:8080\` — map host port → container port
-- \`--name\` — give it a friendly name
-
-### Test it
-
-\`\`\`bash
-curl http://localhost:8080
-# Hello from Docker! 🐳
-\`\`\`
-
-### Inspect logs
-
-\`\`\`bash
-docker logs my-app
-\`\`\`
-
-### Stop & remove
-
-\`\`\`bash
-docker stop my-app
-docker rm my-app
-\`\`\``,
-      },
-    ],
+\`\`\`js
+const config = {
+  plugins: {
+    "@tailwindcss/postcss": {},
   },
-  {
-    slug: "kubernetes-intro",
-    title: "Kubernetes Basics",
-    description:
-      "Deploy your first app to a Kubernetes cluster — pods, services, deployments, and kubectl fundamentals.",
-    icon: "☸️",
-    difficulty: "Advanced",
-    duration: "45 min",
-    tags: ["kubernetes", "k8s", "k3s", "devops"],
-    steps: [
-      {
-        id: "k8s-concepts",
-        title: "Core Concepts",
-        content: `## Kubernetes Core Concepts
+};
 
-Kubernetes (K8s) is an open-source system for **automating deployment, scaling, and management** of containerized applications.
+export default config;
+\`\`\`
 
-### The control loop
+Then add this at the top of \`src/app/globals.css\`:
 
-K8s continuously reconciles the **desired state** (what you declare) with the **actual state** (what's running).
+\`\`\`css
+@import "tailwindcss";
+\`\`\`
 
-### Building blocks
-
-| Resource | Purpose |
-|----------|---------|
-| **Pod** | Smallest unit — wraps one or more containers |
-| **Deployment** | Manages replica sets, rolling updates |
-| **Service** | Stable network endpoint for a set of pods |
-| **Namespace** | Virtual cluster for resource isolation |
-| **ConfigMap** | Key-value config, injected into pods |
-| **Secret** | Like ConfigMap but for sensitive data |
-
-### Check your cluster
-
-\`\`\`bash
-kubectl cluster-info
-kubectl get nodes
-\`\`\``,
+Now Tailwind utility classes are available in your components.`,
       },
       {
-        id: "first-deployment",
-        title: "Your First Deployment",
-        content: `## Deploying an App to K8s
+        id: "tailwind-header",
+        title: "Create the Header Menu",
+        content: `## Build a Simple Navigation Header
 
-### Create a deployment
+Create \`src/components/HeaderMenu.tsx\`:
 
-\`\`\`bash
-kubectl create deployment nginx --image=nginx:alpine
+\`\`\`tsx
+export default function HeaderMenu() {
+  return (
+    <header className="border-b border-slate-200 bg-white">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+        <a className="text-lg font-bold text-slate-900" href="#">
+          CodeForge
+        </a>
+
+        <nav className="hidden gap-6 md:flex">
+          <a className="text-sm font-medium text-slate-600 hover:text-slate-900" href="#">Home</a>
+          <a className="text-sm font-medium text-slate-600 hover:text-slate-900" href="#">Lessons</a>
+          <a className="text-sm font-medium text-slate-600 hover:text-slate-900" href="#">Pricing</a>
+          <a className="text-sm font-medium text-slate-600 hover:text-slate-900" href="#">Contact</a>
+        </nav>
+
+        <button className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white">
+          Sign in
+        </button>
+      </div>
+    </header>
+  );
+}
 \`\`\`
 
-### Watch it come up
-
-\`\`\`bash
-kubectl get pods -w
-\`\`\`
-
-Press \`Ctrl+C\` when the pod shows \`Running\`.
-
-### Expose it as a service
-
-\`\`\`bash
-kubectl expose deployment nginx \\
-  --port=80 \\
-  --type=NodePort
-\`\`\`
-
-### Get the URL (k3s)
-
-\`\`\`bash
-kubectl get svc nginx
-\`\`\`
-
-Use the \`NODE_PORT\` shown and your node IP to open the app.
-
-### Scale it
-
-\`\`\`bash
-kubectl scale deployment nginx --replicas=3
-kubectl get pods
-\`\`\`
-
-Three pods are now load-balanced by the service! 🚀`,
+Render it in \`src/app/page.tsx\` to test the header.`,
       },
       {
-        id: "write-manifests",
-        title: "Write YAML Manifests",
-        content: `## Declarative Configuration with YAML
+        id: "tailwind-mobile",
+        title: "Add a Mobile Menu Button",
+        content: `## Improve Mobile UX
 
-Infrastructure-as-code: describe what you want, K8s makes it happen.
+The nav links are hidden on small screens (\`hidden md:flex\`).
 
-### deployment.yaml
+Add a mobile menu button that appears only on small screens:
 
-\`\`\`yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-  namespace: default
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: my-app
-  template:
-    metadata:
-      labels:
-        app: my-app
-    spec:
-      containers:
-        - name: my-app
-          image: nginx:alpine
-          ports:
-            - containerPort: 80
-          resources:
-            requests:
-              memory: "64Mi"
-              cpu: "50m"
-            limits:
-              memory: "128Mi"
-              cpu: "200m"
+\`\`\`tsx
+<button className="md:hidden rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700">
+  Menu
+</button>
 \`\`\`
 
-### Apply it
+Stretch goal:
 
-\`\`\`bash
-kubectl apply -f deployment.yaml
-kubectl get deploy my-app
-\`\`\`
+- Use React state to toggle a dropdown menu under the header.
+- Animate open/close with Tailwind transition classes.
 
-### Update it (edit replicas, then re-apply)
-
-\`\`\`bash
-sed -i 's/replicas: 2/replicas: 4/' deployment.yaml
-kubectl apply -f deployment.yaml
-kubectl rollout status deployment/my-app
-\`\`\``,
+This gives you a responsive header pattern you can reuse across projects.`,
       },
     ],
   },

@@ -15,19 +15,23 @@ spec:
             - name: cleanup
               image: curlimages/curl:latest
               command:
-                - curl
-                - -sf
-                - -X
-                - POST
-                - -H
-                - "Authorization: Bearer $(CLEANUP_SECRET)"
-                - "https://codeforge.tkweb.site/api/code-server/cleanup"
+                - /bin/sh
+                - -c
+                - >
+                  curl -sf -X POST
+                  -H "Authorization: Bearer ${CLEANUP_SECRET}"
+                  "${CODEFORGE_APP_URL}/api/code-server/cleanup"
               env:
                 - name: CLEANUP_SECRET
                   valueFrom:
                     secretKeyRef:
                       name: codeforge-secrets
                       key: CODE_SERVER_CLEANUP_SECRET
+                - name: CODEFORGE_APP_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: codeforge-secrets
+                      key: CODEFORGE_APP_URL
               resources:
                 requests:
                   cpu: 50m
