@@ -1,60 +1,82 @@
 # CodeForge
 
-Interactive coding lessons with a live per-user VS Code workspace. The Next.js app serves lesson content, authenticates users with Better Auth, and creates an isolated code-server Pod + Service + Ingress + PVC for each user in Kubernetes.
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)
+![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-Dynamic%20Workspaces-326CE5?logo=kubernetes&logoColor=white)
+![Auth](https://img.shields.io/badge/Auth-Better%20Auth-7C3AED)
 
-## Commands
+**CodeForge** is an interactive lesson platform that pairs step-by-step coding guides with a **live, per-user VS Code workspace** running in Kubernetes. Users open a lesson, sign in, and start coding in the browser without local setup.
 
-```bash
-pnpm install
-pnpm dev
-pnpm lint
-pnpm build
+## Why CodeForge
+
+- **Live coding environment** embedded next to lesson content
+- **Dedicated workspace per user** backed by Pod, Service, Ingress, and PVC resources
+- **Next.js 16 App Router** frontend with server-driven orchestration
+- **Better Auth + PostgreSQL** for authentication and workspace state
+- **Resettable workspaces** with versioned paths to avoid stale editor state
+- **Automatic cleanup** for idle environments
+
+## How it works
+
+```mermaid
+flowchart LR
+  A[User opens a lesson] --> B[Next.js app authenticates user]
+  B --> C[Workspace ensure API checks Postgres state]
+  C --> D[Kubernetes creates or reuses Pod, Service, Ingress, PVC]
+  D --> E[code-server starts from custom image]
+  E --> F[Lesson page loads workspace in an iframe]
+  F --> G[User codes in /home/coder/ws-<resetCount>/lessons/<templateSlug>]
 ```
 
-There is no automated test suite.
+### Runtime flow
 
-## Big picture
+1. A user opens `/lessons/[slug]`.
+2. The lesson page authenticates the user and stays dynamic with `await connection()`.
+3. The app ensures a code-server workspace exists for that user.
+4. Kubernetes provisions or reuses deterministic `cs-<slug>` resources.
+5. The frontend polls workspace status and loads the lesson-scoped folder in an iframe.
+6. A cleanup CronJob removes stale runtime resources after the idle timeout.
 
-```text
-Browser
-  ├── Next.js app
-  │     ├── /login, /signup            Better Auth + PostgreSQL
-  │     ├── /lessons                   Lesson catalog
-  │     ├── /lessons/[slug]            Lesson markdown + code-server iframe
-  │     └── /api/code-server/*         Ensure / status / reset / cleanup
-  │
-  └── iframe -> https://<slug>.codelearn.tkweb.site
-                 └── per-user code-server Pod + Service + Ingress + PVC
+## Feature highlights
 
-Kubernetes (namespace: codelearn)
-  ├── Traefik ingress controller
-  ├── cert-manager ClusterIssuer + wildcard Certificate
-  ├── RBAC for codeforge-sa
-  └── Cleanup CronJob (calls /api/code-server/cleanup)
-```
+### In-browser lessons
 
-Key runtime pieces:
+Lesson content lives in `data/lessons.ts` and is rendered alongside the workspace. The current starter lessons focus on practical UI building tasks such as layouts and hero sections, with support for shared starter templates.
 
-- `app/lessons/[slug]/page.tsx` authenticates the user, calls `await connection()`, ensures the workspace exists, and passes the workspace URL into the split layout.
-- `components/CodeServerPanel.tsx` owns the iframe UX and polls `/api/code-server/status` while the pod is starting.
-- `lib/code-server-orchestrator.ts` coordinates PostgreSQL state, K8s resource creation, status checks, cleanup, and workspace reset.
-- `lib/code-server-k8s.ts` creates the dynamic Pod / Service / Ingress / PVC resources using deterministic names based on `sha256(userId).slice(0, 32)`.
-- `code-server/Dockerfile` builds the custom workspace image used by user Pods. `code-server/entrypoint.sh` seeds `/home/coder/ws-<resetCount>` from `/home/coder/template` and creates lesson-scoped folders under `lessons/<templateSlug>`.
+### Per-user workspaces
+
+Each authenticated user gets an isolated code-server instance with a persistent volume. Workspace URLs are generated from a deterministic user slug, and reset operations move the editor to a new `ws-<resetCount>` path.
+
+### Kubernetes-native orchestration
+
+The app creates and manages Pods, Services, Ingresses, PVCs, and cleanup jobs directly through the Kubernetes API instead of proxying traffic through Next.js.
+
+## Tech stack
+
+| Layer | Stack |
+| --- | --- |
+| Frontend | Next.js 16, React 19, TypeScript |
+| Auth | Better Auth |
+| Database | PostgreSQL (`pg`) |
+| Lesson rendering | `react-markdown`, `remark-gfm` |
+| Workspace runtime | `code-server` in Kubernetes |
+| Infra | Kustomize, cert-manager, Traefik |
 
 ## Project structure
 
 ```text
-app/                    App Router pages and API routes
-components/             Client components for auth, layout, and iframe UX
-lib/                    Auth, DB, K8s client, and code-server orchestration
-data/                   Lesson metadata and markdown content
+app/                    App Router pages and route handlers
+components/             UI components for lessons, auth, layout, and iframe UX
+data/                   Lesson metadata and markdown step content
+lib/                    Auth, DB, K8s client, and workspace orchestration
 code-server/            Custom code-server image and workspace entrypoint
 k8s/                    Kustomize base/overlays, TLS manifests, secret examples
-docs/                   Infra-specific runbooks (for example remote K8s API access)
-UPDATE.md               Current operations and troubleshooting guide
+docs/                   Infra and deployment runbooks
+UPDATE.md               Operations and troubleshooting guide
 ```
 
-## Step-by-step setup
+## Quick start
 
 ### 1. Install dependencies
 
@@ -63,161 +85,81 @@ pnpm install
 cp .env.example .env.local
 ```
 
-Fill in at least:
+### 2. Configure local environment
 
-- `DATABASE_URL`
-- `BETTER_AUTH_SECRET`
-- `BETTER_AUTH_URL`
-- OAuth client IDs/secrets if you want Google or GitHub login
-- `K8S_NAMESPACE=codelearn`
-- `CODE_SERVER_DOMAIN`
-- `CODE_SERVER_TLS_SECRET`
-- `CODE_SERVER_IMAGE`
-- `CODE_SERVER_CLEANUP_SECRET`
-
-If you are developing on the same machine that already has kubeconfig access to the cluster, leave `K8S_API_SERVER` and `K8S_AUTH_TOKEN` empty and the app will use `~/.kube/config`.
-
-### 2. Use the custom code-server image
-
-The repo expects a custom image, not the stock `ghcr.io/coder/code-server`, because the custom image installs Node.js + pnpm and seeds starter workspaces.
-
-Default image used in the examples:
+At minimum, set these values in `.env.local`:
 
 ```bash
+BETTER_AUTH_SECRET=
+BETTER_AUTH_URL=http://localhost:3000
+DATABASE_URL=
+CODE_SERVER_DOMAIN=
+CODE_SERVER_TLS_SECRET=
 CODE_SERVER_IMAGE=ghcr.io/dedkola/codeforge-cs:latest
+CODE_SERVER_CLEANUP_SECRET=
+K8S_NAMESPACE=codelearn
 ```
 
-To rebuild and push your own image:
+Optional OAuth providers are supported through GitHub and Google client credentials.
 
-```bash
-gh workflow run build-code-server.yml
-```
-
-Or build locally from `code-server/` if you want to publish your own tag.
-
-### 3. Set up the wildcard workspace domain
-
-1. Point `*.codelearn.tkweb.site` to the public IP that serves Traefik.
-2. Forward ports `80` and `443` to the K3s node.
-3. Install cert-manager:
-
-   ```bash
-   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
-   kubectl -n cert-manager rollout status deploy --timeout=120s
-   ```
-
-4. Create the Cloudflare DNS token secret used by the ClusterIssuer:
-
-   ```bash
-   kubectl -n cert-manager create secret generic cloudflare-api-token-secret \
-     --from-literal=api-token=<your-cloudflare-api-token>
-   ```
-
-5. Apply the issuer and wildcard certificate:
-
-   ```bash
-   kubectl apply -f k8s/ssl/clusterissuer.yaml
-   kubectl apply -f k8s/ssl/cert.yaml
-   kubectl -n codelearn get certificate
-   ```
-
-The current certificate manifest issues `codelearn.tkweb.site` and `*.codelearn.tkweb.site` into the `wildcard-codelearn-tls` secret.
-
-### 4. Apply the cluster resources
-
-The active Kustomize layout is:
-
-- `k8s/base` - namespace, RBAC, cleanup CronJob, network policy, limit range
-- `k8s/overlays/prod` - base + wildcard TLS manifests
-- `k8s` - root umbrella that points at `overlays/prod`
-
-Apply the main stack:
-
-```bash
-kubectl apply -k k8s
-```
-
-This creates the namespace, `codeforge-sa`, cleanup CronJob, and the wildcard certificate resources.
-
-### 5. Create the secret used by the cleanup CronJob (and optionally by your app deployment)
-
-Copy the example, fill in real values, and apply it:
-
-```bash
-cp k8s/secrets.yaml.example k8s/secrets.yaml
-kubectl apply -f k8s/secrets.yaml
-```
-
-Important keys in that secret:
-
-- `CODEFORGE_APP_URL` - the base URL the cleanup CronJob should call, for example `https://codeforge.tkweb.site`
-- `CODE_SERVER_CLEANUP_SECRET` - bearer token checked by `/api/code-server/cleanup`
-- `CODE_SERVER_IMAGE` - custom code-server image tag
-
-### 6. Choose how the app reaches Kubernetes
-
-#### Option A: Local dev or app running on a machine with kubeconfig
-
-Leave `K8S_API_SERVER` and `K8S_AUTH_TOKEN` unset. `lib/k8s.ts` will use the default kubeconfig.
-
-#### Option B: App running inside the cluster
-
-Do not set `K8S_API_SERVER` or `K8S_AUTH_TOKEN`. The client will auto-detect in-cluster credentials via the pod ServiceAccount.
-
-#### Option C: App running outside the cluster
-
-Expose the K3s API through Cloudflare Tunnel, then set:
-
-```bash
-K8S_API_SERVER=https://k8s.tkweb.site
-K8S_AUTH_TOKEN=<token created below>
-K8S_SKIP_TLS_VERIFY=false
-```
-
-For the full tunnel flow, see `docs/K3S-CLOUDFLARE-TUNNEL-API-ACCESS.md`.
-
-### 7. Create a ServiceAccount token for external app access
-
-If the app is running outside the cluster, mint a token for `codeforge-sa`:
-
-```bash
-kubectl -n codelearn create token codeforge-sa --duration=8760h
-```
-
-Use that token as `K8S_AUTH_TOKEN`.
-
-### 8. Start the app
+### 3. Start the app
 
 ```bash
 pnpm dev
 ```
 
-Open a lesson, log in, and verify the full flow:
+### 4. Open a lesson
 
-1. Lesson page loads.
-2. A Pod / Service / Ingress / PVC named from `cs-<slug>` is created in `codelearn`.
-3. The iframe eventually loads `https://<slug>.codelearn.tkweb.site/?folder=/home/coder/ws-<n>/lessons/<templateSlug>`.
+Visit `http://localhost:3000`, sign in, and open a lesson from `/lessons`.
 
-Useful checks:
+## Running with Kubernetes
+
+CodeForge expects a Kubernetes cluster for live workspaces. The app can connect to Kubernetes in three ways:
+
+- **Local development with kubeconfig**: leave `K8S_API_SERVER` and `K8S_AUTH_TOKEN` unset
+- **In-cluster deployment**: rely on the pod ServiceAccount
+- **External app deployment**: set `K8S_API_SERVER`, `K8S_AUTH_TOKEN`, and optional TLS settings
+
+### Core deployment steps
 
 ```bash
-kubectl get pods -n codelearn -l app=code-server-user
-kubectl get ingress -n codelearn
-kubectl get pvc -n codelearn
-kubectl logs -n codelearn job.batch/cs-cleanup --tail=100
+kubectl apply -k k8s
 ```
 
-## Cleanup behavior
+You will also need:
 
-- The app stores workspace lifecycle state in the `code_server_instance` table.
-- The cleanup CronJob runs every 30 minutes.
-- It calls `/api/code-server/cleanup` with `CODE_SERVER_CLEANUP_SECRET`.
-- The cleanup route deletes stale user Pods / Services / Ingresses after `CODE_SERVER_MAX_IDLE_MINUTES`.
-- PVCs are preserved unless the user triggers a workspace reset or you delete the PVC manually.
+- a wildcard domain for per-user workspace hosts
+- cert-manager for TLS issuance
+- a populated `k8s/secrets.yaml` based on `k8s/secrets.yaml.example`
+- the custom code-server image from `code-server/`
 
-## Related docs
+For the full infrastructure flow, use the docs linked below.
 
-- `UPDATE.md` - operations, rollout, and troubleshooting
-- `docs/K3S-CLOUDFLARE-TUNNEL-API-ACCESS.md` - remote K8s API setup
-- `k8s/README.md` - Kustomize layout and secret files
-- `code-server/README.md` - custom workspace image details
+## Commands
+
+```bash
+pnpm dev
+pnpm lint
+pnpm build
+pnpm start
+```
+
+There is currently **no automated test suite** in the repository.
+
+## Documentation
+
+- [`UPDATE.md`](./UPDATE.md) - operations, rollout, and troubleshooting
+- [`k8s/README.md`](./k8s/README.md) - Kubernetes layout and required secrets
+- [`code-server/README.md`](./code-server/README.md) - custom workspace image details
+- [`docs/K3S-CLOUDFLARE-TUNNEL-API-ACCESS.md`](./docs/K3S-CLOUDFLARE-TUNNEL-API-ACCESS.md) - remote Kubernetes API access
+
+## Development notes
+
+- Import workspace actions from `@/lib/code-server-manager`
+- Use `buildCodeServerUrl()` instead of assembling workspace URLs by hand
+- Resolve lesson template slugs before building workspace folder paths
+- `instrumentation.ts` bootstraps the workspace state table on Node.js startup
+
+## Contributing
+
+Contributions that improve lessons, workspace reliability, auth flows, or deployment ergonomics are a good fit for this repo. Keep changes focused, document infra updates, and use `pnpm lint` and `pnpm build` before opening a PR.
