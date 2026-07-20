@@ -12,7 +12,7 @@
     "@better-auth/infra": "^0.2.5",
     "@kubernetes/client-node": "^1.4.0",
     "better-auth": "^1.6.23",
-    "next": "16.2.6",
+    "next": "16.2.10",
     "pg": "^8.22.0",
     "react": "19.2.5",
     "react-dom": "19.2.5",
