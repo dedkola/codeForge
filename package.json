@@ -9,7 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@better-auth/infra": "^0.2.5",
+    "@better-auth/infra": "^0.3.6",
     "@kubernetes/client-node": "^1.4.0",
     "better-auth": "^1.6.23",
     "next": "16.2.10",
