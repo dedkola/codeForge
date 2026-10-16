@@ -107,7 +107,7 @@ Check that:
 ### Remote K8s API access fails
 
 ```bash
-curl -I https://k8s.tkweb.site
+curl -I https://k8s.tkweb.dev
 ```
 
 Also verify:
