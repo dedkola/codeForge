@@ -2,18 +2,18 @@
 
 Use this when the Next.js app runs outside the cluster and still needs to create per-user workspace resources through the Kubernetes API.
 
-This tunnel is only for the Kubernetes API. User workspaces still load through the wildcard Traefik ingress on `*.codelearn.tkweb.site`.
+This tunnel is only for the Kubernetes API. User workspaces still load through the wildcard Traefik ingress on `*.codelearn.tkweb.dev`.
 
 ## What this solves
 
 ```text
 External app (local / Vercel / VPS)
-  -> https://k8s.tkweb.site
+  -> https://k8s.tkweb.dev
   -> Cloudflare Tunnel
   -> K3s API on localhost:6443
 
 Browser iframe
-  -> https://<slug>.codelearn.tkweb.site
+  -> https://<slug>.codelearn.tkweb.dev
   -> Traefik Ingress
   -> per-user code-server Service
 ```
@@ -23,13 +23,13 @@ Browser iframe
 - K3s cluster running
 - `kubectl` access to the cluster
 - Cloudflare account for the domain
-- Wildcard workspace domain already set up for `*.codelearn.tkweb.site`
+- Wildcard workspace domain already set up for `*.codelearn.tkweb.dev`
 
 ## Step 1 - Create the tunnel in Cloudflare
 
 Create a tunnel that forwards:
 
-- hostname: `k8s.tkweb.site`
+- hostname: `k8s.tkweb.dev`
 - service: `https://localhost:6443`
 
 If you prefer the CLI flow, the equivalent local config is:
@@ -39,7 +39,7 @@ tunnel: <TUNNEL_ID>
 credentials-file: /root/.cloudflared/<TUNNEL_ID>.json
 
 ingress:
-  - hostname: k8s.tkweb.site
+  - hostname: k8s.tkweb.dev
     service: https://localhost:6443
     originRequest:
       noTLSVerify: true
@@ -69,7 +69,7 @@ Use that value as `K8S_AUTH_TOKEN`.
 Set these in `.env.local` or in your deployment platform:
 
 ```bash
-K8S_API_SERVER=https://k8s.tkweb.site
+K8S_API_SERVER=https://k8s.tkweb.dev
 K8S_AUTH_TOKEN=<service-account-token>
 K8S_SKIP_TLS_VERIFY=false
 K8S_NAMESPACE=codelearn
@@ -83,7 +83,7 @@ From a machine outside the cluster:
 
 ```bash
 curl -s -H "Authorization: Bearer <TOKEN>" \
-  https://k8s.tkweb.site/api/v1/namespaces/codelearn/pods | head -20
+  https://k8s.tkweb.dev/api/v1/namespaces/codelearn/pods | head -20
 ```
 
 If the token and tunnel are correct, you should get a JSON response.
@@ -94,7 +94,7 @@ If the token and tunnel are correct, you should get a JSON response.
 2. Log in
 3. Open a lesson
 4. Confirm a `cs-<slug>` Pod is created in `codelearn`
-5. Confirm the iframe opens `https://<slug>.codelearn.tkweb.site`
+5. Confirm the iframe opens `https://<slug>.codelearn.tkweb.dev`
 
 Useful commands:
 
@@ -106,7 +106,7 @@ kubectl get pods -n codelearn -l app=code-server-user
 
 | Problem | Check |
 | --- | --- |
-| `401 Unauthorized` from `k8s.tkweb.site` | Regenerate the `codeforge-sa` token |
+| `401 Unauthorized` from `k8s.tkweb.dev` | Regenerate the `codeforge-sa` token |
 | `403 Forbidden` | Verify the `codeforge-sa` Role and RoleBinding in `k8s/base/rbac.yaml` |
 | App cannot reach K8s API | Verify `K8S_API_SERVER`, `K8S_AUTH_TOKEN`, and `K8S_SKIP_TLS_VERIFY=false` |
 | Workspace pods created but iframe fails | The issue is likely wildcard ingress/TLS, not the K8s API tunnel |

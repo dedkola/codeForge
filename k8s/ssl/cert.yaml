@@ -16,5 +16,5 @@ spec:
     kind: ClusterIssuer
     group: cert-manager.io
   dnsNames:
-    - "codelearn.tkweb.site"
-    - "*.codelearn.tkweb.site"
+    - "codelearn.tkweb.dev"
+    - "*.codelearn.tkweb.dev"
