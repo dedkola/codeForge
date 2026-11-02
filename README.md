@@ -1,12 +1,33 @@
 # CodeForge
 
+> **Archive notice: this project is no longer maintained.** The repository is
+> kept public as a reference implementation. Issues and pull requests are not
+> monitored, and no further releases are planned.
+
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)
 ![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-Dynamic%20Workspaces-326CE5?logo=kubernetes&logoColor=white)
 ![Auth](https://img.shields.io/badge/Auth-Better%20Auth-7C3AED)
 
 **CodeForge** is an interactive lesson platform that pairs step-by-step coding guides with a **live, per-user VS Code workspace** running in Kubernetes. Users open a lesson, sign in, and start coding in the browser without local setup.
+
+The UI still uses the project's earlier working name, **CodeLearn**, in page titles and copy.
+
+## Project status
+
+- **Archived / unmaintained.** Development stopped in 2026; the code is frozen as-is.
+- **No automated test suite** exists in the repository.
+- `pnpm build` succeeds (verified 2026-11-02 with placeholder environment values and no live database or cluster).
+- `pnpm lint` currently reports 2 errors (`react-hooks/set-state-in-effect`) in `components/CodeServerPanel.tsx`. They were left untouched during archive prep rather than changing application code.
+- No licence file is included, so the code is published without an explicit grant of rights.
+
+## Requirements
+
+- Node.js 20 or newer
+- pnpm 10 or newer (the lockfile is `pnpm-lock.yaml`)
+- PostgreSQL for auth and workspace state
+- A Kubernetes cluster (optional for the UI alone, required for live workspaces)
 
 ## Why CodeForge
 
@@ -144,7 +165,9 @@ pnpm build
 pnpm start
 ```
 
-There is currently **no automated test suite** in the repository.
+`pnpm build` is the only check that currently passes end to end; it also runs
+TypeScript type checking. There is **no automated test suite** and no `pnpm test`
+script, so there is no single-test command.
 
 ## Documentation
 
@@ -162,4 +185,6 @@ There is currently **no automated test suite** in the repository.
 
 ## Contributing
 
-Contributions that improve lessons, workspace reliability, auth flows, or deployment ergonomics are a good fit for this repo. Keep changes focused, document infra updates, and use `pnpm lint` and `pnpm build` before opening a PR.
+The project is archived and not accepting contributions. If you reuse parts of
+it, the deployment manifests assume a Kubernetes cluster with cert-manager,
+Traefik, a wildcard DNS record, and a populated `codeforge-secrets` Secret.
